@@ -1,0 +1,33 @@
+{
+  "name": "Finventory",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "body-parser": "^1.20.3",
+    "connect-flash": "^0.1.1",
+    "cors": "^2.8.5",
+    "csv-parser": "^3.2.0",
+    "ejs": "^3.1.10",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "express-ejs-layouts": "^2.5.1",
+    "express-session": "^1.18.1",
+    "flash": "^1.1.0",
+    "multer": "^2.0.2",
+    "mysql": "^2.18.1",
+    "mysql2": "^3.14.2",
+    "node-dbf": "^0.4.0",
+    "nodemon": "^3.1.10",
+    "php": "^1.1.0",
+    "tailwind": "^4.0.0",
+    "xlsx": "^0.18.5"
+  }
+}

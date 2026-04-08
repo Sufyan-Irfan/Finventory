@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Cash Book</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container mt-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h4>Cash Book</h4>
+      <div>Period: <strong><%= start_date %></strong> → <strong><%= end_date %></strong></div>
+      <div class="text-muted">Cash Account: <strong><%= cash_account %></strong></div>
+    </div>
+
+    <div class="text-end">
+      <div class="fw-semibold"><%= company_code %></div>
+      <div class="mt-2">
+        <button class="btn btn-outline-dark btn-sm me-2" onclick="exportToPDF()">📄 Export PDF</button>
+        <button class="btn btn-outline-success btn-sm" onclick="exportToExcel()">📊 Export Excel</button>
+      </div>
+    </div>
+  </div>
+
+  <% if (error) { %>
+    <div class="alert alert-warning"><%= error %></div>
+  <% } %>
+
+  <table class="table table-bordered table-sm">
+    <thead class="table-light">
+      <tr>
+        <th>Date</th>
+        <th>Voucher No</th>
+        <th>Narration</th>
+        <th>Reference</th>
+        <th class="text-end">Debit</th>
+        <th class="text-end">Credit</th>
+        <th class="text-end">Balance</th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <tr class="fw-bold">
+        <td colspan="6">Opening Balance</td>
+        <td class="text-end"><%= Number(opening).toFixed(2) %></td>
+      </tr>
+
+      <% rows.forEach(r => { %>
+        <tr>
+          <td><%= r.date %></td>
+          <td><%= r.voucher_no || '-' %></td>
+          <td><%= r.description || '-' %></td>
+          <td><%= r.reference || '' %></td>
+          <td class="text-end"><%= r.debit ? Number(r.debit).toFixed(2) : '' %></td>
+          <td class="text-end"><%= r.credit ? Number(r.credit).toFixed(2) : '' %></td>
+          <td class="text-end"><%= Number(r.balance).toFixed(2) %></td>
+        </tr>
+      <% }) %>
+
+      <tr class="fw-bold bg-light">
+        <td colspan="4" class="text-end">Totals</td>
+        <td class="text-end"><%= Number(totals.debit).toFixed(2) %></td>
+        <td class="text-end"><%= Number(totals.credit).toFixed(2) %></td>
+        <td class="text-end">
+          <%= (Number(opening) + Number(totals.debit) - Number(totals.credit)).toFixed(2) %>
+        </td>
+      </tr>
+
+    </tbody>
+  </table>
+
+  <a href="/cash-book" class="btn btn-link">← Back to filters</a>
+</div>
+
+<!-- ================== JS LIBS ================== -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<script>
+const data = <%- JSON.stringify({ rows, totals, opening, start_date, end_date, company_code, cash_account }) %>;
+
+function num(n) {
+  return Number(n || 0).toFixed(2);
+}
+
+/* ================= PDF ================= */
+function exportToPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p', 'pt', 'a4');
+
+  doc.setFontSize(12).setFont('helvetica','bold');
+  doc.text('Cash Book', 40, 30);
+
+  doc.setFontSize(10).setFont('helvetica','normal');
+  doc.text(data.company_code, doc.internal.pageSize.getWidth() - 40, 30, { align:'right' });
+  doc.text(`Period: ${data.start_date} - ${data.end_date}`, 40, 50);
+  doc.text(`Cash Account: ${data.cash_account}`, 40, 65);
+
+  const body = [];
+  body.push(['Date','Voucher','Narration','Reference','Debit','Credit','Balance']);
+  body.push(['','','Opening Balance','','','',num(data.opening)]);
+
+  data.rows.forEach(r => {
+    body.push([
+      r.date || '',
+      r.voucher_no || '',
+      r.description || '',
+      r.reference || '',
+      r.debit ? num(r.debit) : '',
+      r.credit ? num(r.credit) : '',
+      num(r.balance)
+    ]);
+  });
+
+  body.push(['','','Totals','',num(data.totals.debit),num(data.totals.credit),
+    num(Number(data.opening)+Number(data.totals.debit)-Number(data.totals.credit))
+  ]);
+
+  doc.autoTable({
+    head:[body.shift()],
+    body,
+    startY:90,
+    styles:{ fontSize:9 },
+    theme:'grid'
+  });
+
+  window.open(doc.output('bloburl'),'_blank');
+}
+
+/* ================= EXCEL ================= */
+function exportToExcel() {
+  const sheetData = [];
+
+  sheetData.push(['Cash Book']);
+  sheetData.push([`Company: ${data.company_code}`]);
+  sheetData.push([`Period: ${data.start_date} - ${data.end_date}`]);
+  sheetData.push([]);
+
+  sheetData.push(['Date','Voucher No','Narration','Reference','Debit','Credit','Balance']);
+  sheetData.push(['','','Opening Balance','','','',num(data.opening)]);
+
+  data.rows.forEach(r => {
+    sheetData.push([
+      r.date || '',
+      r.voucher_no || '',
+      r.description || '',
+      r.reference || '',
+      r.debit || '',
+      r.credit || '',
+      num(r.balance)
+    ]);
+  });
+
+  sheetData.push(['','','Totals','',
+    data.totals.debit,
+    data.totals.credit,
+    num(Number(data.opening)+Number(data.totals.debit)-Number(data.totals.credit))
+  ]);
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(sheetData);
+  XLSX.utils.book_append_sheet(wb, ws, 'Cash Book');
+
+  XLSX.writeFile(wb, `Cash_Book_${data.start_date}_to_${data.end_date}.xlsx`);
+}
+</script>
+</body>
+</html>

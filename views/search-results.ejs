@@ -1,0 +1,96 @@
+<h2 class="mb-4">🔍 Search Results</h2>
+
+<% if (message) { %>
+  <div id="successMessage" class="alert alert-success text-center py-2">
+    <%= message %>
+  </div>
+  <% } %>
+
+    <% if (!vouchers || vouchers.length===0) { %>
+      <div class="alert alert-warning text-center">
+        No vouchers found.
+      </div>
+      <% } else { %>
+
+        <% vouchers.forEach(v=> { %>
+          <div class="card mb-3 shadow-sm border-0">
+
+            <!-- HEADER -->
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+              <div>
+                <div class="fw-bold">Voucher #: <%= v.voucher_no %>
+                </div>
+                <small>Date: <%= v.date %></small>
+              </div>
+
+              <div class="d-flex gap-2">
+                <a href="/gl/add-transaction?voucher_no=<%= v.voucher_no %>&type=<%= v.voucher_type === 'PV' ? 'payment' : 'receipt' %>"
+                  class="btn btn-sm btn-outline-light">
+                  <i class="bi bi-pencil"></i> Edit
+                </a>
+
+
+                <form method="POST" action="/gl/delete-voucher/<%= v.voucher_no %>"
+                  onsubmit="return confirm('Delete complete voucher?');">
+                  <button class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <!-- BODY -->
+            <div class="table-responsive">
+              <table class="table table-sm table-bordered mb-0 align-middle">
+                <thead class="table-light text-center">
+                  <tr>
+                    <th style="width:40%">Account</th>
+                    <th>Description</th>
+                    <th class="text-end">Debit</th>
+                    <th class="text-end">Credit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <strong>
+                        <%= v.account_code %>
+                      </strong>
+                      <div class="text-muted small">
+                        <%= v.account_name %>
+                      </div>
+                    </td>
+                    <td>
+                      <%= v.description || '-' %>
+                    </td>
+                    <td class="text-end text-success">
+                      <%= v.debit ? Number(v.debit).toLocaleString() : '' %>
+                    </td>
+                    <td class="text-end text-danger">
+                      <%= v.credit ? Number(v.credit).toLocaleString() : '' %>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- FOOTER -->
+            <div class="card-footer small text-muted">
+              <%= v.reference ? 'Ref: ' + v.reference : '' %>
+            </div>
+
+          </div>
+          <% }) %>
+
+            <% } %>
+
+              <script>
+                setTimeout(() => {
+                  const msg = document.getElementById('successMessage');
+                  if (msg) {
+                    msg.style.transition = "opacity 0.5s ease";
+                    msg.style.opacity = "0";
+                    setTimeout(() => msg.remove(), 600);
+                  }
+                }, 3000);
+              </script>

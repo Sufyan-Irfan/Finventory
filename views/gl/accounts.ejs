@@ -1,0 +1,188 @@
+<style>
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px auto;
+    max-width: 900px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e0e0e0;
+  }
+
+  .card h2 {
+    margin-bottom: 15px;
+    color: #333;
+  }
+
+  .form-row {
+    margin-bottom: 12px;
+  }
+
+  input,
+  select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+  }
+
+  input:focus,
+  select:focus {
+    border-color: #2196f3;
+    box-shadow: 0 0 5px rgba(33, 150, 243, 0.3);
+  }
+
+  .btn {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #fff;
+  }
+
+  .btn-primary {
+    background: #2196f3;
+  }
+
+  .btn-warning {
+    background: #ff9800;
+  }
+
+  .btn-danger {
+    background: #f44336;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  table th {
+    background: #2196f3;
+    color: #fff;
+    padding: 10px;
+  }
+
+  table td {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+  }
+
+  table tr:hover {
+    background: #f9f9f9;
+  }
+</style>
+
+<div class="card">
+  <h2 id="acc-form-title">Add Account</h2>
+
+  <form id="accountForm" method="POST" action="/gl/add-account">
+
+    <div class="form-row">
+      <label>Group</label>
+      <select id="group_id" name="group_id" required>
+        <% groups.forEach(g=> { %>
+          <option value="<%= g.id %>">
+            <%= g.group_code %> - <%= g.name %>
+          </option>
+          <% }) %>
+      </select>
+    </div>
+
+    <div class="form-row">
+      <label>Account Code</label>
+      <input id="manual_code" name="manual_code">
+    </div>
+
+    <div class="form-row">
+      <label>Name</label>
+      <input id="acc_name" name="name" required>
+    </div>
+
+    <div class="form-row">
+      <label>Opening Balance</label>
+      <input id="opening_balance" name="opening_balance">
+    </div>
+
+    <button class="btn btn-primary" id="accBtn">Add Account</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Accounts List</h2>
+
+  <table>
+    <tr>
+      <th>Code</th>
+      <th>Name</th>
+      <th>Group</th>
+      <th>Balance</th>
+      <th>Action</th>
+    </tr>
+
+    <% accounts.forEach(a=> { %>
+      <tr data-group="<%= a.group_id %>">
+        <td>
+          <%= a.account_code %>
+        </td>
+        <td>
+          <%= a.name %>
+        </td>
+        <td>
+          <%= a.group_name %>
+        </td>
+        <td>
+          <%= a.opening_balance %>
+        </td>
+        <td>
+          <button class="btn btn-warning" onclick="editAccount(
+          <%= a.id %>,
+          '<%= a.group_id %>',
+          '<%= a.name %>',
+          '<%= a.opening_balance %>'
+        )">Edit</button>
+
+          <form method="POST" action="/gl/delete-account/<%= a.id %>" style="display:inline;">
+            <button class="btn btn-danger" onclick="return confirm('Want to delete this Account?')">
+              Delete
+            </button>
+          </form>
+        </td>
+      </tr>
+      <% }) %>
+  </table>
+</div>
+
+<script>
+document.getElementById('group_id').addEventListener('change', function () {
+  const selected = this.value;
+  const rows = document.querySelectorAll('table tbody tr');
+
+  rows.forEach(row => {
+    if (!selected || row.dataset.group == selected) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
+});
+</script>
+
+<script>
+  window.editAccount = function (id, groupId, name, balance) {
+
+    document.getElementById('acc-form-title').innerText = "Edit Account";
+
+    document.getElementById('group_id').value = groupId;
+    document.getElementById('group_id').disabled = true;
+
+    document.getElementById('manual_code').style.display = 'none';
+
+    document.getElementById('acc_name').value = name;
+    document.getElementById('opening_balance').value = balance;
+
+    document.getElementById('accountForm').action = "/gl/update-account/" + id;
+
+    document.getElementById('accBtn').innerText = "Update";
+  }
+</script>

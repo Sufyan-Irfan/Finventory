@@ -1,0 +1,235 @@
+<div class="container mt-4">
+  <div class="card shadow-sm">
+    <div class="card-header bg-primary text-white">
+      <h5 class="mb-0">
+        <%= editData ? 'Edit ' + (voucher_type==='PV' ? 'Cash Payment Voucher' : 'Cash Receipt Voucher' ) :
+          (voucher_type==='PV' ? 'Cash Payment Voucher' : 'Cash Receipt Voucher' ) %>
+      </h5>
+    </div>
+
+    <div class="card-body">
+      <div id="alertBox"></div>
+
+      <form id="transactionForm">
+        <input type="hidden" name="entry_type" value="<%= entry_type %>">
+        <input type="hidden" name="voucher_type" value="<%= voucher_type %>">
+        <input type="hidden" name="is_edit" value="<%= editData ? 1 : 0 %>">
+        <input type="hidden" name="date" id="date">
+
+        <div class="row g-3">
+
+          <!-- DATE -->
+          <div class="col-md-4">
+            <label class="form-label">Date</label>
+            <input type="text" id="date_display" class="form-control" required>
+          </div>
+
+          <!-- VOUCHER -->
+          <div class="col-md-4">
+            <label class="form-label">Voucher No</label>
+            <input type="text" id="voucher_no" name="voucher_no" class="form-control bg-light" readonly
+              value="<%= editData ? editData.voucher_no : '' %>">
+          </div>
+
+          <!-- SERIAL -->
+          <div class="col-md-4">
+            <label class="form-label">Serial No</label>
+            <input type="text" name="serial_no" class="form-control" value="<%= editData ? editData.serial_no : '' %>">
+          </div>
+
+          <!-- ACCOUNT -->
+          <div class="col-md-6">
+            <label class="form-label">Account</label>
+            <select id="account_code" name="account_code" class="form-select" required>
+              <option value="">Select Account</option>
+              <% accounts.forEach(a=> { %>
+                <option value="<%= a.account_code %>" <%=editData &&
+                  String(editData.account_code)===String(a.account_code) ? 'selected' : '' %>>
+                  <%= a.account_code %> - <%= a.name %>
+                </option>
+                <% }) %>
+            </select>
+          </div>
+
+          <!-- ACCOUNT BALANCE -->
+          <div class="col-md-6">
+            <label class="form-label">Account Balance</label>
+            <input type="text" id="accountBalance" class="form-control bg-light" readonly value="0.00">
+          </div>
+
+          <!-- NARRATION -->
+          <div class="col-md-12">
+            <label class="form-label">Narration</label>
+            <input type="text" name="description" class="form-control"
+              value="<%= editData ? editData.description : '' %>">
+          </div>
+
+          <!-- REFERENCE -->
+          <div class="col-md-6">
+            <label class="form-label">Reference</label>
+            <input type="text" name="reference" class="form-control" value="<%= editData ? editData.reference : '' %>">
+          </div>
+
+          <!-- INVOICE -->
+          <div class="col-md-6">
+            <label class="form-label">Invoice</label>
+            <input type="text" name="invoice" class="form-control" value="<%= editData ? editData.invoice : '' %>">
+          </div>
+
+          <!-- AMOUNT -->
+          <div class="col-md-6">
+            <label class="form-label">Amount</label>
+            <input type="number" name="amount" step="0.01" class="form-control" required
+              value="<%= editData ? editData.amount : '' %>">
+          </div>
+
+          <!-- BATCH -->
+          <div class="col-md-6">
+            <label class="form-label">Batch Total</label>
+            <input type="text" id="batch_total" class="form-control bg-light" readonly
+              value="<%= editData ? editData.amount : '0.00' %>">
+          </div>
+
+          <!-- CASH -->
+          <div class="col-md-12">
+            <label class="form-label">Cash in Hand</label>
+            <input type="text" id="cashInHand" class="form-control bg-light" readonly value="0.00">
+          </div>
+
+        </div>
+
+        <div class="mt-4 text-end">
+          <button type="button" id="saveBtn" class="btn btn-success px-4">
+            <%= editData ? 'Update Transaction' : 'Save Transaction' %>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- JS LIBS -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0/dist/css/select2.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0/dist/js/select2.min.js"></script>
+
+<script>
+$(document).ready(function () {
+
+  const isEdit = <%= editData ? 'true' : 'false' %>;
+  const editDate = "<%= editData ? editData.date : '' %>";
+  const editAccount = "<%= editData ? editData.account_code : '' %>";
+  const editAmount = "<%= editData ? editData.amount : '' %>";
+  const cashCode = "<%= settings.cash_account_code %>";
+  const voucherType = "<%= voucher_type %>";
+
+  // ================= DATE FIX (NO SHIFT) =================
+  function formatToDB(dateObj) {
+    return dateObj.getFullYear() + "-" +
+      String(dateObj.getMonth() + 1).padStart(2, "0") + "-" +
+      String(dateObj.getDate()).padStart(2, "0");
+  }
+
+  let initialDate;
+
+  if (isEdit && editDate) {
+    // 🔥 IMPORTANT: manual split (NO timezone bug)
+    const parts = editDate.split("-");
+    initialDate = new Date(parts[0], parts[1] - 1, parts[2]);
+    $("#date").val(editDate);
+  } else {
+    initialDate = new Date();
+    $("#date").val(formatToDB(initialDate));
+  }
+
+  flatpickr("#date_display", {
+    dateFormat: "d-m-Y",
+    defaultDate: initialDate,
+    allowInput: true,
+    onChange: function (selectedDates) {
+      if (selectedDates.length) {
+        $("#date").val(formatToDB(selectedDates[0]));
+      }
+    }
+  });
+
+  // ================= VOUCHER =================
+  if (!isEdit) {
+    fetch(`/api/next-voucher?voucher_type=${voucherType}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) $("#voucher_no").val(d.voucher_no);
+      });
+  }
+
+  // ================= ACCOUNT FIX =================
+  if (isEdit && editAccount) {
+    $("#account_code").val(String(editAccount));
+  }
+
+  // ================= BALANCE =================
+  async function fetchBalance(code, target) {
+    if (!code) return $(target).val("0.00");
+
+    try {
+      const r = await fetch(`/api/account-balance/${code}`);
+      const d = await r.json();
+      $(target).val(d.balance || "0.00");
+    } catch {
+      $(target).val("0.00");
+    }
+  }
+
+  $("#account_code").on("change", function () {
+    fetchBalance(this.value, "#accountBalance");
+  });
+
+  // 🔥 initial load
+  if (isEdit && editAccount) {
+    fetchBalance(editAccount, "#accountBalance");
+  }
+
+  fetchBalance(cashCode, "#cashInHand");
+
+  // ================= AMOUNT FIX =================
+  if (isEdit && editAmount) {
+    const amt = parseFloat(editAmount);
+    if (!isNaN(amt)) {
+      $("input[name='amount']").val(amt);
+      $("#batch_total").val(amt.toFixed(2));
+    }
+  }
+
+  $("input[name='amount']").on("input", function () {
+    const val = parseFloat(this.value) || 0;
+    $("#batch_total").val(val.toFixed(2));
+  });
+
+  // ================= SAVE =================
+  $("#saveBtn").click(async function () {
+    const form = document.getElementById("transactionForm");
+    const data = Object.fromEntries(new FormData(form));
+
+    const res = await fetch("/gl/add-transaction", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+
+    const r = await res.json();
+
+    $("#alertBox").html(
+      `<div class="alert alert-${r.success ? 'success' : 'danger'}">${r.message}</div>`
+    );
+
+    if (r.success) {
+      setTimeout(() => {
+        window.location.href = `/search?query=${data.voucher_no}&message=Updated`;
+      }, 2000);
+    }
+  });
+
+});
+</script>

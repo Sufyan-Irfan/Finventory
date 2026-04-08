@@ -1,0 +1,176 @@
+<div class="container mt-4">
+  <h4>Company Setup</h4>
+
+  <% if (messages.error && messages.error.length) { %>
+    <div class="alert alert-danger"><%= messages.error[0] %></div>
+  <% } %>
+  <% if (messages.success && messages.success.length) { %>
+    <div class="alert alert-success"><%= messages.success[0] %></div>
+  <% } %>
+
+  <!-- ================= COMPANY SETTINGS ================= -->
+  <form action="/setup/settings" method="POST" class="p-3 bg-light rounded shadow-sm mb-4">
+
+    <div class="row">
+      <div class="col-md-6 mb-2">
+        <label>Cash Account Code</label>
+        <input type="text" name="cash_account_code" value="<%= settings.cash_account_code || '' %>" class="form-control">
+      </div>
+
+      <div class="col-md-6 mb-2">
+        <label>Receipt Voucher Prefix</label>
+        <input type="text" name="voucher_prefix_receipt" value="<%= settings.voucher_prefix_receipt || '' %>" class="form-control">
+      </div>
+
+      <div class="col-md-6 mb-2">
+        <label>Payment Voucher Prefix</label>
+        <input type="text" name="voucher_prefix_payment" value="<%= settings.voucher_prefix_payment || '' %>" class="form-control">
+      </div>
+
+      <div class="col-md-6 mb-2">
+        <label>Financial Year Start</label>
+        <input type="date" name="financial_year_start" value="<%= settings.financial_year_start || '' %>" class="form-control">
+      </div>
+
+      <div class="col-md-6 mb-3">
+        <label>Financial Year End</label>
+        <input type="date" name="financial_year_end" value="<%= settings.financial_year_end || '' %>" class="form-control">
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">💾 Save Settings</button>
+  </form>
+
+  <hr>
+
+  <!-- ===================== BULK IMPORT ===================== -->
+<h5>Bulk Data Import</h5>
+<p class="text-muted">Supported formats: <strong>.csv, .xls, .xlsx</strong></p>
+
+<form action="/setup/import-data" method="POST" enctype="multipart/form-data" class="p-3 bg-light rounded shadow-sm">
+
+  <div class="row mb-3">
+    <div class="col-md-6">
+      <label>Select Import Type</label>
+      <select name="import_type" id="importType" class="form-control" required>
+        <option value="">-- Select Type --</option>
+        <option value="account">Accounts Table</option>
+        <option value="transaction">Transaction Table</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- 🔥 ACCOUNT FORMAT GUIDE -->
+  <div id="accountFormatBox" 
+       style="display:none; background:#e3f2fd; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #90caf9;">
+       
+    <b>📌 Account Import Format:</b><br>
+    Columns must be:<br>
+    <code>group_code | manual_code | name | opening_balance</code>
+
+    <ul style="margin-top:8px;">
+      <li><b>group_code</b> → existing group ka 4 digit code</li>
+      <li><b>manual_code</b> → max 5 digit (auto merge ho jayega)</li>
+      <li><b>name</b> → account name</li>
+      <li><b>opening_balance</b> → optional</li>
+    </ul>
+
+    <small style="color:#555;">
+      Example: 100 | 1 | Cash | 5000 → Account Code = 10000001
+    </small>
+  </div>
+
+  <!-- 🔥 TRANSACTION FORMAT -->
+<div id="transactionFormatBox" style="display:none; background:#fff3cd; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #ffeeba;">
+  
+  <b>📌 Transaction Import Format:</b><br>
+<code>
+type | date | voucher_no | account_code | debit | credit | invoice | description | voucher_type | cash_code | reference | serial_no
+</code>
+
+<li><b>date</b> → dd/mm/yyyy format</li>
+<li><b>voucher_no</b> → required</li>
+  <ul style="margin-top:8px;">
+    <li><b>type</b> → CB / SP</li>
+    <li><b>voucher_type</b> → RV / PV</li>
+    <li><b>account_code</b> → must exist</li>
+    <li><b>cash_code</b> → optional</li>
+  </ul>
+</div>
+
+  <div class="row align-items-end">
+    <div class="col-md-8">
+      <label>Select File</label>
+      <input type="file" name="dataFile" accept=".csv,.xls,.xlsx" class="form-control" required>
+    </div>
+
+    <div class="col-md-4 mt-3 mt-md-0">
+      <button type="submit" class="btn btn-success w-100">📥 Import Data</button>
+    </div>
+  </div>
+
+</form>
+
+<!-- FLASH MESSAGE BOTTOM BAR -->
+<div id="flashMessage" 
+     style="display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+            background:#333; color:#fff; padding:12px 25px; border-radius:8px; 
+            box-shadow:0 4px 10px rgba(0,0,0,0.3); z-index:9999;">
+</div>
+
+<div id="loaderOverlay" 
+     style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+            background:rgba(0,0,0,0.5); color:#fff; z-index:99999; 
+            text-align:center; padding-top:20%;">
+  <div class="spinner-border text-light" style="width:3rem; height:3rem;"></div>
+  <h4 class="mt-3">Processing... please wait</h4>
+</div>
+
+<script>
+  // 🔥 SHOW ACCOUNT FORMAT GUIDE
+  document.getElementById("importType").addEventListener("change", function () {
+  document.getElementById("accountFormatBox").style.display = "none";
+  document.getElementById("transactionFormatBox").style.display = "none";
+
+  if (this.value === "account") {
+    document.getElementById("accountFormatBox").style.display = "block";
+  }
+
+  if (this.value === "transaction") {
+    document.getElementById("transactionFormatBox").style.display = "block";
+  }
+});
+</script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const flashMsg = "<%= messages && messages.success && messages.success.length ? messages.success[0] : (messages && messages.error && messages.error.length ? messages.error[0] : '') %>";
+
+    if (flashMsg) {
+      const bar = document.getElementById("flashMessage");
+      bar.innerText = flashMsg;
+      bar.style.display = "block";
+
+      setTimeout(() => {
+        bar.style.opacity = "0";
+        setTimeout(() => bar.style.display = "none", 500);
+      }, 3000);
+    }
+  });
+</script>
+
+<script>
+  document.querySelector('form[action="/setup/import-data"]')
+    .addEventListener('submit', () => {
+      document.getElementById("loaderOverlay").style.display = "block";
+    });
+
+  document.querySelector('form[action="/setup/settings"]')
+    .addEventListener('submit', () => {
+      const bar = document.getElementById("flashMessage");
+      bar.innerText = "Saving settings...";
+      bar.style.display = "block";
+      setTimeout(() => bar.style.display="none", 3000);
+    });
+</script>
+

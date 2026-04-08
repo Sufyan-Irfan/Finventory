@@ -1,0 +1,115 @@
+<style>
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px auto;
+  max-width: 800px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  border: 1px solid #e0e0e0;
+}
+
+.card h2 {
+  margin-bottom: 15px;
+}
+
+input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
+.btn {
+  padding: 10px 15px;
+  border-radius: 8px;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  margin: 10px 0px;
+}
+
+.btn-primary { background: #2196f3; }
+.btn-warning { background: #ff9800; }
+.btn-danger { background: #f44336; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  background: #2196f3;
+  color: #fff;
+  padding: 10px;
+}
+
+td {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+}
+</style>
+
+<div class="card">
+  <h2 id="form-title">Add Group</h2>
+
+  <form id="groupForm" method="POST" action="/gl/add-group">
+
+    <label>Group Code</label>
+    <input id="group_code" name="group_code" required>
+
+    <label>Name</label>
+    <input id="group_name" name="name" required>
+
+    <button class="btn btn-primary" id="submitBtn">Add Group</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Groups List</h2>
+
+  <table>
+    <tr>
+      <th>Code</th>
+      <th>Name</th>
+      <th>Action</th>
+    </tr>
+
+    <% groups.forEach(g => { %>
+    <tr>
+      <td><%= g.group_code %></td>
+      <td><%= g.name %></td>
+      <td>
+
+        <button class="btn btn-warning"
+          onclick="editGroup(<%= g.id %>, '<%= g.group_code %>', '<%= g.name %>')">
+          Edit
+        </button>
+
+        <form method="POST" action="/gl/delete-group/<%= g.id %>" style="display:inline;">
+          <button class="btn btn-danger"
+            onclick="return confirm('Delete group?')">
+            Delete
+          </button>
+        </form>
+
+      </td>
+    </tr>
+    <% }) %>
+  </table>
+</div>
+
+<script>
+window.editGroup = function(id, code, name) {
+  document.getElementById('form-title').innerText = "Edit Group";
+
+  document.getElementById('group_code').value = code;
+  document.getElementById('group_code').disabled = true;
+
+  document.getElementById('group_name').value = name;
+
+  document.getElementById('groupForm').action = "/gl/update-group/" + id;
+
+  document.getElementById('submitBtn').innerText = "Update";
+}
+</script>

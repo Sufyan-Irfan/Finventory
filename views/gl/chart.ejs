@@ -1,0 +1,83 @@
+<style>
+  .coa-container {
+    max-width: 900px;
+    margin: 20px auto;
+    font-family: Arial;
+  }
+
+  .coa-title {
+    font-size: 22px;
+    font-weight: bold;
+    margin-bottom: 15px;
+  }
+
+  .group-box {
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+
+  .group-header {
+    background: #f5f7fa;
+    padding: 10px 15px;
+    font-weight: bold;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .account-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 15px;
+    border-bottom: 1px solid #eee;
+    transition: 0.2s;
+  }
+
+  .account-row:last-child {
+    border-bottom: none;
+  }
+
+  .account-row:hover {
+    background: #f9f9f9;
+  }
+
+  .acc-code {
+    font-weight: 600;
+    color: #333;
+  }
+
+  .acc-name {
+    color: #555;
+  }
+</style>
+
+<div class="coa-container">
+  <div class="coa-title">Chart of Accounts</div>
+
+  <% let currentGroup = null; %>
+
+  <% accounts.forEach(a => { %>
+
+    <% if(currentGroup !== a.group_code){ %>
+      <% if(currentGroup !== null){ %>
+        </div> <!-- close previous group -->
+      <% } %>
+
+      <div class="group-box">
+        <div class="group-header">
+          <%= a.group_code %> - <%= a.group_name %>
+        </div>
+
+      <% currentGroup = a.group_code; %>
+    <% } %>
+
+    <div class="account-row">
+      <div class="acc-code"><%= a.account_code %></div>
+      <div class="acc-name"><%= a.name %></div>
+    </div>
+
+  <% }) %>
+
+  </div> <!-- last group -->
+</div>

@@ -1,0 +1,61 @@
+<style>
+.bg-gradient-primary { background: linear-gradient(135deg,#4e73df,#224abe); }
+.bg-gradient-secondary { background: linear-gradient(135deg,#6c757d,#343a40); }
+
+.bg-soft-green { background:#e9f7ef; }
+.bg-soft-blue { background:#eaf2fb; }
+.bg-soft-success { background:#e6fffa; }
+.bg-soft-danger { background:#ffeaea; }
+</style>
+
+<style>
+.list-group-item {
+  font-size: 0.95rem;
+}
+.text-truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+</style>
+
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h3 class="fw-bold mb-0">📊 Dashboard</h3>
+    <small class="text-muted">Financial overview</small>
+  </div>
+</div>
+
+<div class="row mt-4">
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white fw-bold">
+        💵 Cash Accounts
+      </div>
+
+      <ul class="list-group list-group-flush">
+
+        <% cash_balances.forEach(c => { %>
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span class="text-truncate" style="max-width:70%">
+              <%= c.name %>
+            </span>
+
+            <span class="fw-semibold <%= c.balance < 0 ? 'text-danger' : 'text-success' %>">
+              <%= c.balance.toLocaleString() %>
+            </span>
+          </li>
+        <% }) %>
+
+        <% if (cash_balances.length === 0) { %>
+          <li class="list-group-item text-muted text-center">
+            No cash accounts found
+          </li>
+        <% } %>
+
+      </ul>
+    </div>
+  </div>
+</div>
+
