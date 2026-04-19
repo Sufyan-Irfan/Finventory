@@ -26,14 +26,9 @@
 // });
 // module.exports = pool.promise();
 
-console.log("🔍 BEFORE DB REQUIRE");
-const db = require('./db');
-console.log("🔍 AFTER DB REQUIRE");
-
 require("dotenv").config();
 const mysql = require("mysql2");
 
-// DEBUG - remove after fixing
 console.log("🔍 ENV CHECK:", {
   MYSQLHOST: process.env.MYSQLHOST,
   MYSQLPORT: process.env.MYSQLPORT,
@@ -42,22 +37,20 @@ console.log("🔍 ENV CHECK:", {
   hasPassword: !!process.env.MYSQLPASSWORD
 });
 
-const isRailway = process.env.MYSQLHOST !== undefined;
-
-const db = mysql.createPool({
-  host: isRailway ? process.env.MYSQLHOST : process.env.DB_HOST,
-  user: isRailway ? process.env.MYSQLUSER : process.env.DB_USER,
-  password: isRailway ? process.env.MYSQLPASSWORD : process.env.DB_PASSWORD,
-  database: isRailway ? process.env.MYSQLDATABASE : process.env.DB_NAME,
-  port: isRailway ? parseInt(process.env.MYSQLPORT) : parseInt(process.env.DB_PORT),
-  ssl: isRailway ? { rejectUnauthorized: false } : undefined,
+const pool = mysql.createPool({
+  host: process.env.MYSQLHOST || process.env.DB_HOST,
+  user: process.env.MYSQLUSER || process.env.DB_USER,
+  password: process.env.MYSQLPASSWORD || process.env.DB_PASSWORD,
+  database: process.env.MYSQLDATABASE || process.env.DB_NAME,
+  port: parseInt(process.env.MYSQLPORT || process.env.DB_PORT) || 3306,
+  ssl: process.env.MYSQLHOST ? { rejectUnauthorized: false } : undefined,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
   connectTimeout: 10000
 });
 
-db.getConnection((err, connection) => {
+pool.getConnection((err, connection) => {
   if (err) {
     console.error("❌ DB Connection Failed:", err.message, err.code);
   } else {
@@ -66,4 +59,4 @@ db.getConnection((err, connection) => {
   }
 });
 
-module.exports = db.promise();
+module.exports = pool.promise();
