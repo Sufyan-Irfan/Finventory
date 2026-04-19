@@ -1002,7 +1002,41 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
         (SELECT COUNT(DISTINCT voucher_no) FROM transactions WHERE company_code = ?) AS total_transactions
     `, [companyCode, companyCode]);
 
-    /* ================= CASH ACCOUNTS (GROUP 0151) ================= */
+
+    /* ================= GET CASH ACCOUNT CODE ================= */
+    const [[settings]] = await db.query(
+      "SELECT cash_account_code FROM company_settings WHERE company_code=?",
+      [companyCode]
+    );
+
+    if (!settings || !settings.cash_account_code) {
+      return res.render('dashboard', {
+        total_accounts: stats.total_accounts,
+        total_transactions: stats.total_transactions,
+        cash_balances: []
+      });
+    }
+
+    const CASH_ACCOUNT = settings.cash_account_code;
+
+
+    /* ================= GET CASH GROUP ================= */
+    const [[cashGroup]] = await db.query(`
+      SELECT group_id 
+      FROM accounts 
+      WHERE account_code = ? AND company_code = ?
+    `, [CASH_ACCOUNT, companyCode]);
+
+    if (!cashGroup) {
+      return res.render('dashboard', {
+        total_accounts: stats.total_accounts,
+        total_transactions: stats.total_transactions,
+        cash_balances: []
+      });
+    }
+
+
+    /* ================= CASH ACCOUNTS ================= */
     const [cashAccounts] = await db.query(`
       SELECT
         a.account_code,
@@ -1011,15 +1045,15 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
         IFNULL(SUM(t.debit),0) AS debit,
         IFNULL(SUM(t.credit),0) AS credit
       FROM accounts a
-      JOIN groups g ON g.id = a.group_id
       LEFT JOIN transactions t
         ON t.account_code = a.account_code
         AND t.company_code = ?
-      WHERE g.group_code = '0151'
+      WHERE a.group_id = ?
         AND a.company_code = ?
       GROUP BY a.account_code, a.name, a.opening_balance
       ORDER BY a.name
-    `, [companyCode, companyCode]);
+    `, [companyCode, cashGroup.group_id, companyCode]);
+
 
     /* ================= FINAL BALANCES ================= */
     const cash_balances = cashAccounts.map(a => ({
@@ -1030,6 +1064,8 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
         Number(a.credit || 0)
     }));
 
+
+    /* ================= RENDER ================= */
     res.render('dashboard', {
       total_accounts: stats.total_accounts,
       total_transactions: stats.total_transactions,
@@ -1559,8 +1595,11 @@ app.post('/gl/delete-voucher/:voucher_no', isAuthenticated, async (req, res) => 
 
 // app.listen(3000, () => console.log('Server running on http://localhost:3000'));
 // Automatically detect IPv4 of this PC
+require("dotenv").config();
+
 function getLocalIP() {
-  for (const iface of Object.values(networkInterfaces)) {
+  const interfaces = os.networkInterfaces();
+  for (const iface of Object.values(interfaces)) {
     for (const config of iface) {
       if (config.family === 'IPv4' && !config.internal) {
         return config.address;
@@ -1571,7 +1610,6 @@ function getLocalIP() {
 }
 
 const localIP = getLocalIP();
-
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {

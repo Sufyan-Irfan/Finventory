@@ -26,14 +26,34 @@
 // });
 // module.exports = pool.promise();
 
+require("dotenv").config();
 const mysql = require("mysql2");
 
+// Railway vs Local auto detect
+const isRailway = process.env.MYSQLHOST !== undefined;
+
 const db = mysql.createPool({
-  host: process.env.DB_HOST || "localhost",
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "",
-  database: process.env.DB_NAME || "ledger_db",
-  port: process.env.DB_PORT || 3306,
+  host: isRailway ? process.env.MYSQLHOST : process.env.DB_HOST,
+  user: isRailway ? process.env.MYSQLUSER : process.env.DB_USER,
+  password: isRailway ? process.env.MYSQLPASSWORD : process.env.DB_PASSWORD,
+  database: isRailway ? process.env.MYSQLDATABASE : process.env.DB_NAME,
+  port: isRailway ? process.env.MYSQLPORT : process.env.DB_PORT,
+  ssl: isRailway ? { rejectUnauthorized: false } : undefined,
+
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  connectTimeout: 10000  // ← add this
+});
+
+// At the bottom of db.js, after module.exports
+db.getConnection((err, connection) => {
+  if (err) {
+    console.error("❌ DB Connection Failed:", err.message);
+  } else {
+    console.log("✅ MySQL Connected Successfully");
+    connection.release();
+  }
 });
 
 module.exports = db.promise();
