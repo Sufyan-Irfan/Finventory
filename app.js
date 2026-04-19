@@ -160,7 +160,7 @@ app.post('/users/add', isAuthenticated, isAdmin, async (req, res) => {
       if (!companyExists) {
         for (const g of DEFAULT_GROUPS) {
           await db.query(
-            "INSERT INTO groups (group_code, name, company_code) VALUES (?, ?, ?)",
+            "INSERT INTO `groups` (group_code, name, company_code) VALUES (?, ?, ?)",
             [g.code, g.name, company_code]
           );
         }
@@ -375,7 +375,7 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
 
         // 🔥 FIND GROUP
         const [[group]] = await conn.query(
-          "SELECT id FROM groups WHERE group_code=? AND company_code=?",
+          "SELECT id FROM `groups` WHERE group_code=? AND company_code=?",
           [group_code, companyCode]
         );
 
@@ -572,7 +572,7 @@ app.get('/gl/groups', isAuthenticated, async (req, res) => {
   const companyCode = req.session.user.company_code;
 
   const [groups] = await db.query(
-    "SELECT * FROM groups WHERE company_code=? ORDER BY group_code",
+    "SELECT * FROM `groups` WHERE company_code=? ORDER BY group_code",
     [companyCode]
   );
 
@@ -593,7 +593,7 @@ app.post('/gl/add-group', isAuthenticated, async (req, res) => {
   }
 
   const [[exists]] = await db.query(
-    "SELECT id FROM groups WHERE group_code=? AND company_code=?",
+    "SELECT id FROM `groups` WHERE group_code=? AND company_code=?",
     [group_code, companyCode]
   );
 
@@ -603,7 +603,7 @@ app.post('/gl/add-group', isAuthenticated, async (req, res) => {
   }
 
   await db.query(
-    "INSERT INTO groups (group_code, name, company_code) VALUES (?, ?, ?)",
+    "INSERT INTO `groups` (group_code, name, company_code) VALUES (?, ?, ?)",
     [group_code, name, companyCode]
   );
 
@@ -615,7 +615,7 @@ app.post('/gl/update-group/:id', isAuthenticated, async (req, res) => {
   const { name } = req.body;
 
   await db.query(
-    "UPDATE groups SET name=? WHERE id=?",
+    "UPDATE `groups` SET name=? WHERE id=?",
     [name, req.params.id]
   );
 
@@ -637,7 +637,7 @@ app.post('/gl/delete-group/:id', isAuthenticated, async (req, res) => {
   }
 
   await db.query(
-    "DELETE FROM groups WHERE id=? AND company_code=?",
+    "DELETE FROM `groups` WHERE id=? AND company_code=?",
     [req.params.id, companyCode]
   );
 
@@ -653,14 +653,14 @@ app.get('/gl/accounts', isAuthenticated, async (req, res) => {
   const [accounts] = await db.query(`
     SELECT a.*, g.name as group_name, g.group_code
     FROM accounts a
-    JOIN groups g ON g.id = a.group_id
+    JOIN `groups` g ON g.id = a.group_id
     WHERE a.company_code = ?
     ORDER BY g.group_code, a.account_code
   `, [companyCode]);
 
   // 🔥 ADD THIS
   const [groups] = await db.query(
-    "SELECT * FROM groups WHERE company_code=?",
+    "SELECT * FROM `groups` WHERE company_code=?",
     [companyCode]
   );
 
@@ -680,7 +680,7 @@ app.post('/gl/add-account', isAuthenticated, async (req, res) => {
   }
 
   const [[group]] = await db.query(
-    "SELECT group_code FROM groups WHERE id=? AND company_code=?",
+    "SELECT group_code FROM `groups` WHERE id=? AND company_code=?",
     [group_id, companyCode]
   );
 
@@ -754,7 +754,7 @@ app.get('/gl/chart', isAuthenticated, async (req, res) => {
   const [accounts] = await db.query(`
     SELECT a.*, g.name as group_name, g.group_code
     FROM accounts a
-    JOIN groups g ON g.id = a.group_id
+    JOIN `groups` g ON g.id = a.group_id
     WHERE a.company_code = ?
     ORDER BY g.group_code, a.account_code
   `, [companyCode]);
@@ -1273,7 +1273,7 @@ app.post('/trial-balance-result', isAuthenticated, async (req, res) => {
         a.opening_balance,
         COALESCE(SUM(t.debit),0)  AS debit,
         COALESCE(SUM(t.credit),0) AS credit
-      FROM groups g
+      FROM `groups` g
       JOIN accounts a 
         ON a.group_id = g.id
        AND a.company_code = g.company_code
