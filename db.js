@@ -29,7 +29,15 @@
 require("dotenv").config();
 const mysql = require("mysql2");
 
-// Railway vs Local auto detect
+// DEBUG - remove after fixing
+console.log("🔍 ENV CHECK:", {
+  MYSQLHOST: process.env.MYSQLHOST,
+  MYSQLPORT: process.env.MYSQLPORT,
+  MYSQLUSER: process.env.MYSQLUSER,
+  MYSQLDATABASE: process.env.MYSQLDATABASE,
+  hasPassword: !!process.env.MYSQLPASSWORD
+});
+
 const isRailway = process.env.MYSQLHOST !== undefined;
 
 const db = mysql.createPool({
@@ -37,19 +45,17 @@ const db = mysql.createPool({
   user: isRailway ? process.env.MYSQLUSER : process.env.DB_USER,
   password: isRailway ? process.env.MYSQLPASSWORD : process.env.DB_PASSWORD,
   database: isRailway ? process.env.MYSQLDATABASE : process.env.DB_NAME,
-  port: isRailway ? process.env.MYSQLPORT : process.env.DB_PORT,
+  port: isRailway ? parseInt(process.env.MYSQLPORT) : parseInt(process.env.DB_PORT),
   ssl: isRailway ? { rejectUnauthorized: false } : undefined,
-
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  connectTimeout: 10000  // ← add this
+  connectTimeout: 10000
 });
 
-// At the bottom of db.js, after module.exports
 db.getConnection((err, connection) => {
   if (err) {
-    console.error("❌ DB Connection Failed:", err.message);
+    console.error("❌ DB Connection Failed:", err.message, err.code);
   } else {
     console.log("✅ MySQL Connected Successfully");
     connection.release();
