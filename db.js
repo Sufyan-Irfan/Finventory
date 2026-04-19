@@ -26,7 +26,7 @@
 // });
 // module.exports = pool.promise();
 
-require("dotenv").config();
+// require("dotenv").config();
 const mysql = require("mysql2");
 
 console.log("🔍 ENV CHECK:", {
