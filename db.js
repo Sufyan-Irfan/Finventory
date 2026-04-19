@@ -26,16 +26,8 @@
 // });
 // module.exports = pool.promise();
 
-// require("dotenv").config();
+require("dotenv").config();
 const mysql = require("mysql2");
-
-console.log("🔍 ENV CHECK:", {
-  MYSQLHOST: process.env.MYSQLHOST,
-  MYSQLPORT: process.env.MYSQLPORT,
-  MYSQLUSER: process.env.MYSQLUSER,
-  MYSQLDATABASE: process.env.MYSQLDATABASE,
-  hasPassword: !!process.env.MYSQLPASSWORD
-});
 
 const pool = mysql.createPool({
   host: process.env.MYSQLHOST || process.env.DB_HOST,
@@ -47,7 +39,6 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  connectTimeout: 10000
 });
 
 pool.getConnection((err, connection) => {
