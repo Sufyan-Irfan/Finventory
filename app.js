@@ -653,7 +653,7 @@ app.get('/gl/accounts', isAuthenticated, async (req, res) => {
   const [accounts] = await db.query(`
     SELECT a.*, g.name as group_name, g.group_code
     FROM accounts a
-    JOIN `groups` g ON g.id = a.group_id
+    JOIN \`groups\` g ON g.id = a.group_id
     WHERE a.company_code = ?
     ORDER BY g.group_code, a.account_code
   `, [companyCode]);
@@ -754,7 +754,7 @@ app.get('/gl/chart', isAuthenticated, async (req, res) => {
   const [accounts] = await db.query(`
     SELECT a.*, g.name as group_name, g.group_code
     FROM accounts a
-    JOIN `groups` g ON g.id = a.group_id
+    JOIN \`groups\` g ON g.id = a.group_id
     WHERE a.company_code = ?
     ORDER BY g.group_code, a.account_code
   `, [companyCode]);
@@ -1273,7 +1273,7 @@ app.post('/trial-balance-result', isAuthenticated, async (req, res) => {
         a.opening_balance,
         COALESCE(SUM(t.debit),0)  AS debit,
         COALESCE(SUM(t.credit),0) AS credit
-      FROM `groups` g
+      FROM \`groups\` g
       JOIN accounts a 
         ON a.group_id = g.id
        AND a.company_code = g.company_code
