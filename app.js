@@ -1,9 +1,11 @@
+require("dotenv").config();
 console.log("🔍 APP.JS LOADED");
 console.log("🔍 MYSQLHOST:", process.env.MYSQLHOST);
 console.log("🔍 MYSQLPORT:", process.env.MYSQLPORT);
 const express = require('express');
 const path = require('path');
 const db = require('./db');
+const mysql = require("mysql2");
 const expressLayouts = require('express-ejs-layouts');
 const session = require('express-session');
 const flash = require('connect-flash');
@@ -1598,7 +1600,6 @@ app.post('/gl/delete-voucher/:voucher_no', isAuthenticated, async (req, res) => 
 
 // app.listen(3000, () => console.log('Server running on http://localhost:3000'));
 // Automatically detect IPv4 of this PC
-require("dotenv").config();
 
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
