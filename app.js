@@ -416,7 +416,6 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
       }
 
       /* ================= TRANSACTION IMPORT ================= */
-      /* ================= TRANSACTION IMPORT ================= */
       if (importType === "transaction" && row.account_code && row.voucher_no) {
 
         const entry_type = (row.type || "CB").toString().trim(); // CB / SP
@@ -462,8 +461,7 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
         }
 
         const voucher_no = row.voucher_no.toString().trim();
-        const serial_no = row.serial_no || `${voucher_no}-${row.account_code}`;
-
+const serial_no = row.serial_no ? parseInt(row.serial_no) : 1;
         let account_code = row.account_code.toString().trim();
 
         // ✅ ACCOUNT CHECK
