@@ -26,6 +26,10 @@
 // });
 // module.exports = pool.promise();
 
+console.log("🔍 BEFORE DB REQUIRE");
+const db = require('./db');
+console.log("🔍 AFTER DB REQUIRE");
+
 require("dotenv").config();
 const mysql = require("mysql2");
 

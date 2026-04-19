@@ -1,3 +1,6 @@
+console.log("🔍 APP.JS LOADED");
+console.log("🔍 MYSQLHOST:", process.env.MYSQLHOST);
+console.log("🔍 MYSQLPORT:", process.env.MYSQLPORT);
 const express = require('express');
 const path = require('path');
 const db = require('./db');
