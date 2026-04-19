@@ -800,10 +800,8 @@ app.get('/gl/add-transaction', isAuthenticated, async (req, res) => {
     let partyRow;
 
     if (voucher_type === "RV") {
-      // Receipt → debit is party
       partyRow = rows.find(r => Number(r.debit) > 0);
     } else {
-      // Payment → credit is party
       partyRow = rows.find(r => Number(r.credit) > 0);
     }
 
@@ -839,6 +837,7 @@ app.post('/gl/add-transaction', isAuthenticated, async (req, res) => {
 
   const companyCode = req.session.user.company_code;
   const amt = Number(amount);
+  const serialNo = (serial_no && serial_no.toString().trim() !== '') ? parseInt(serial_no) : 1; // ← FIX
 
   const [[settings]] = await db.query(
     "SELECT cash_account_code FROM company_settings WHERE company_code = ?",
@@ -866,7 +865,7 @@ app.post('/gl/add-transaction', isAuthenticated, async (req, res) => {
        account_code, debit, credit, description, reference, invoice, company_code)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        entry_type, voucher_type, date, voucher_no, serial_no,
+        entry_type, voucher_type, date, voucher_no, serialNo,
         account_code,
         voucher_type === "PV" ? amt : 0,
         voucher_type === "RV" ? amt : 0,
@@ -881,7 +880,7 @@ app.post('/gl/add-transaction', isAuthenticated, async (req, res) => {
        account_code, debit, credit, description, reference, invoice, company_code)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        entry_type, voucher_type, date, voucher_no, serial_no,
+        entry_type, voucher_type, date, voucher_no, serialNo,
         CASH,
         voucher_type === "RV" ? amt : 0,
         voucher_type === "PV" ? amt : 0,
