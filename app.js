@@ -1,4 +1,4 @@
-// require("dotenv").config();
+require("dotenv").config();
 console.log("🔍 APP.JS LOADED");
 console.log("🔍 MYSQLHOST:", process.env.MYSQLHOST);
 console.log("🔍 MYSQLPORT:", process.env.MYSQLPORT);
