@@ -7,7 +7,6 @@ const path = require('path');
 const db = require('./db');
 const mysql = require("mysql2");
 const expressLayouts = require('express-ejs-layouts');
-const session = require('express-session');
 const flash = require('connect-flash');
 const bcrypt = require('bcryptjs');
 const { isAuthenticated } = require('./middleware/auth');
@@ -18,6 +17,8 @@ const xlsx = require("xlsx");
 const fs = require("fs");
 const os = require('os');
 const networkInterfaces = os.networkInterfaces();
+const session = require('express-session');
+const MemoryStore = require('memorystore')(session);
 const ExcelJS = require('exceljs');
 
 const wb = new ExcelJS.Workbook();
@@ -29,7 +30,18 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
-app.use(session({ secret: 'ledger_secret', resave: false, saveUninitialized: true }));
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'ledger_secret',
+  resave: false,
+  saveUninitialized: false,
+  store: new MemoryStore({
+    checkPeriod: 86400000 // 24 hours
+  }),
+  cookie: {
+    secure: false,
+    maxAge: 86400000
+  }
+}));
 app.use(flash());
 app.use((req, res, next) => {
   res.locals.success = req.flash('success');
@@ -461,7 +473,7 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
         }
 
         const voucher_no = row.voucher_no.toString().trim();
-const serial_no = row.serial_no ? parseInt(row.serial_no) : 1;
+        const serial_no = row.serial_no ? parseInt(row.serial_no) : 1;
         let account_code = row.account_code.toString().trim();
 
         // ✅ ACCOUNT CHECK
@@ -551,17 +563,46 @@ const serial_no = row.serial_no ? parseInt(row.serial_no) : 1;
       }
     }
 
-    await conn.commit();
+  await conn.commit();
     conn.release();
     fs.unlinkSync(filePath);
 
-    req.flash("success", `${accountCount} accounts, ${txnCount} transactions imported`);
-    res.redirect("/setup/settings");
+    const [settingsData] = await db.query(
+      'SELECT * FROM company_settings WHERE company_code = ?',
+      [companyCode]
+    );
+
+    const successMsg = accountCount === 0 && txnCount === 0
+      ? null
+      : `✅ Import successful! ${accountCount} accounts, ${txnCount} transactions imported.`;
+
+    const errorMsg = accountCount === 0 && txnCount === 0
+      ? "❌ No data imported! Check column names in your file."
+      : null;
+
+    return res.render('setup/settings', {
+      settings: settingsData[0] || {},
+      messages: {
+        success: successMsg ? [successMsg] : [],
+        error: errorMsg ? [errorMsg] : []
+      }
+    });
 
   } catch (err) {
     console.error("IMPORT ERROR:", err);
-    req.flash("error", err.message);
-    res.redirect("/setup/settings");
+
+    const [settingsData] = await db.query(
+      'SELECT * FROM company_settings WHERE company_code = ?',
+      [companyCode]
+    ).catch(() => [[]]);
+
+    return res.render('setup/settings', {
+      settings: settingsData[0] || {},
+      messages: {
+        success: [],
+        error: [`❌ Import failed: ${err.message}`]
+      }
+    });
   }
 });
 
@@ -816,7 +857,7 @@ app.get('/gl/add-transaction', isAuthenticated, async (req, res) => {
       amount: Number(partyRow.debit || partyRow.credit)
     };
   }
-  
+
   res.render("gl/add-transaction", {
     accounts,
     entry_type,
@@ -1380,18 +1421,19 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
   const CASH = settings?.cash_account_code;
 
   if (!CASH) {
-if (!CASH) {
-    return res.render('cash-book-result', {
-      error: 'Cash account not set in company settings!',
-      rows: [],
-      totals: { debit: 0, credit: 0 },
-      opening: 0,
-      start_date,
-      end_date,
-      company_code,
-      cash_account: ''
-    });
-  }  }
+    if (!CASH) {
+      return res.render('cash-book-result', {
+        error: 'Cash account not set in company settings!',
+        rows: [],
+        totals: { debit: 0, credit: 0 },
+        opening: 0,
+        start_date,
+        end_date,
+        company_code,
+        cash_account: ''
+      });
+    }
+  }
 
   const parseDMY = d => {
     if (!d) return null;
