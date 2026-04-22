@@ -4,10 +4,8 @@
 <head>
   <title>Report Filter</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 </head>
 
@@ -15,90 +13,167 @@
   <div class="container mt-4">
     <h3>🔍 Filter GL Account Transactions</h3>
     <form method="POST" action="/report-result" class="row g-3">
+
       <div class="col-md-6">
         <label>Start Date:</label>
         <input type="text" id="start_date" name="start_date" class="form-control" required>
       </div>
+
       <div class="col-md-6">
         <label>End Date:</label>
         <input type="text" id="end_date" name="end_date" class="form-control" required>
       </div>
 
-      <div class="col-md-12">
+      <!-- ACCOUNT SEARCH -->
+      <div class="col-md-12" style="position:relative;">
         <label>Account:</label>
-        <select id="account" name="account" class="form-select" required>
-          <option value="">Select Account</option>
-          <% accounts.forEach(a=> { %>
-            <option value="<%= a.account_code %>">
-              <%= a.account_code %> - <%= a.name %>
-            </option>
-            <% }) %>
-        </select>
+        <input type="text" id="accountSearch" class="form-control" placeholder="Type code or name..." autocomplete="off">
+        <input type="hidden" id="account" name="account" required>
+        <div id="accountDropdown" style="position:absolute; z-index:9999; background:#fff; border:1px solid #ccc; border-radius:4px; max-height:220px; overflow-y:auto; width:100%; display:none;"></div>
       </div>
 
       <div class="col-md-3">
         <label class="form-label">Entry Type</label>
         <select name="entry_type" id="entry_type" class="form-select">
           <option value="ALL">All</option>
-          <% entryTypes.forEach(t=> { %>
-            <option value="<%= t.entry_type %>">
-              <%= t.entry_type %>
-            </option>
-            <% }) %>
+          <% entryTypes.forEach(t => { %>
+            <option value="<%= t.entry_type %>"><%= t.entry_type %></option>
+          <% }) %>
         </select>
       </div>
 
       <div class="col-12">
         <button type="submit" class="btn btn-primary">Display Report</button>
       </div>
+
     </form>
   </div>
 
   <script>
-    $(document).ready(function () {
-      // ✅ Initialize select2 properly after DOM ready
-      $('#account').select2({
-        placeholder: "Search account...",
-        allowClear: true,
-        width: '100%',
-        matcher: function (params, data) {
-          // ✅ Custom matcher: id ya name dono pe search chale
-          if ($.trim(params.term) === '') {
-            return data;
-          }
-
-          const term = params.term.toLowerCase();
-          const text = (data.text || '').toLowerCase();
-
-          // match either id or name
-          if (text.includes(term)) {
-            return data;
-          }
-
-          return null;
-        }
-      });
-    });
-    // set defaults: start = first of current month, end = today
-    function formatDMY(d) {
-      const dd = String(d.getDate()).padStart(2, '0');
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const yy = d.getFullYear();
-      return `${dd}-${mm}-${yy}`;
-    }
-    const startInput = flatpickr("#start_date", {
-      dateFormat: "d-m-Y",
-      allowInput: true
-    });
-    const endInput = flatpickr("#end_date", {
-      dateFormat: "d-m-Y",
-      allowInput: true
-    });
-
+    // ================= DATES =================
+    const startInput = flatpickr("#start_date", { dateFormat: "d-m-Y", allowInput: true });
+    const endInput   = flatpickr("#end_date",   { dateFormat: "d-m-Y", allowInput: true });
     const now = new Date();
-    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    startInput.setDate(firstOfMonth);
+    startInput.setDate(new Date(now.getFullYear(), now.getMonth(), 1));
     endInput.setDate(now);
+
+    // ================= ACCOUNT SEARCH =================
+    const allAccounts = [
+      <% accounts.forEach((a, i) => { %>
+        { code: "<%= a.account_code %>", name: "<%- a.name.replace(/"/g, '&quot;') %>", label: "<%= a.account_code %> - <%- a.name.replace(/"/g, '&quot;') %>" }<%= i < accounts.length - 1 ? ',' : '' %>
+      <% }) %>
+    ];
+
+    const searchInput  = document.getElementById('accountSearch');
+    const dropdown     = document.getElementById('accountDropdown');
+    const hiddenInput  = document.getElementById('account');
+    let highlightedIndex = -1;
+
+    // "All Accounts" option hamesha pehle
+    const allOption = { code: 'ALL', name: 'All Accounts', label: 'ALL - All Accounts' };
+
+    // Default ALL selected
+    searchInput.value = allOption.label;
+    hiddenInput.value = allOption.code;
+
+    function setAccount(a) {
+      searchInput.value = a.label;
+      hiddenInput.value = a.code;
+      dropdown.style.display = 'none';
+      highlightedIndex = -1;
+    }
+
+    function renderDropdown(search) {
+      dropdown.innerHTML = '';
+      highlightedIndex = -1;
+
+      const list = [allOption, ...allAccounts];
+
+      const filtered = search
+        ? list.filter(a =>
+            a.code.toLowerCase().includes(search) ||
+            a.name.toLowerCase().includes(search)
+          ).slice(0, 50)
+        : list.slice(0, 50);
+
+      if (filtered.length === 0) {
+        dropdown.style.display = 'none';
+        return;
+      }
+
+      filtered.forEach((a, i) => {
+        const div = document.createElement('div');
+        div.textContent = a.label;
+        div.style.cssText = 'padding:8px 12px; cursor:pointer; border-bottom:1px solid #eee; font-size:14px;';
+        div.addEventListener('mouseenter', () => {
+          highlightedIndex = i;
+          updateHighlight();
+        });
+        div.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          setAccount(a);
+        });
+        dropdown.appendChild(div);
+      });
+
+      dropdown._filtered = filtered;
+      dropdown.style.display = 'block';
+    }
+
+    function updateHighlight() {
+      const items = dropdown.querySelectorAll('div');
+      items.forEach((el, i) => {
+        el.style.background = i === highlightedIndex ? '#d0e8ff' : '#fff';
+      });
+      if (items[highlightedIndex]) {
+        items[highlightedIndex].scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    searchInput.addEventListener('input', function() {
+      hiddenInput.value = '';
+      renderDropdown(this.value.toLowerCase());
+    });
+
+    searchInput.addEventListener('keydown', function(e) {
+      const items = dropdown._filtered || [];
+      if (!items.length) return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
+        updateHighlight();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        highlightedIndex = Math.max(highlightedIndex - 1, 0);
+        updateHighlight();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (highlightedIndex >= 0 && items[highlightedIndex]) {
+          setAccount(items[highlightedIndex]);
+        }
+      } else if (e.key === 'Escape') {
+        dropdown.style.display = 'none';
+      }
+    });
+
+    searchInput.addEventListener('blur', () => {
+      setTimeout(() => dropdown.style.display = 'none', 200);
+    });
+
+    searchInput.addEventListener('focus', function() {
+      renderDropdown(this.value.toLowerCase());
+    });
+
+    // Form submit pe validate karo
+    document.querySelector('form').addEventListener('submit', function(e) {
+      if (!hiddenInput.value) {
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.style.borderColor = 'red';
+        alert('Please select an account!');
+      }
+    });
   </script>
 </body>
 
