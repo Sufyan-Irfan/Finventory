@@ -18,79 +18,66 @@
 
         <div class="row g-3">
 
-          <!-- DATE -->
           <div class="col-md-4">
             <label class="form-label">Date</label>
             <input type="text" id="date_display" class="form-control" required>
           </div>
 
-          <!-- VOUCHER -->
           <div class="col-md-4">
             <label class="form-label">Voucher No</label>
             <input type="text" id="voucher_no" name="voucher_no" class="form-control bg-light" readonly
               value="<%= editData ? editData.voucher_no : '' %>">
           </div>
 
-          <!-- SERIAL -->
           <div class="col-md-4">
             <label class="form-label">Serial No</label>
             <input type="text" name="serial_no" class="form-control" value="<%= editData ? editData.serial_no : '' %>">
           </div>
 
-          <!-- ACCOUNT -->
-          <div class="col-md-6">
+          <!-- ACCOUNT SEARCH -->
+          <div class="col-md-6" style="position:relative;">
             <label class="form-label">Account</label>
-            <select id="account_code" name="account_code" class="form-select" required>
-              <option value="">Select Account</option>
-              <% accounts.forEach(a=> { %>
-                <option value="<%= a.account_code %>" <%=editData &&
-                  String(editData.account_code)===String(a.account_code) ? 'selected' : '' %>>
-                  <%= a.account_code %> - <%= a.name %>
-                </option>
-                <% }) %>
-            </select>
+            <input type="text" id="accountSearch" class="form-control" placeholder="Select Account..."
+              autocomplete="off">
+            <input type="hidden" id="account_code" name="account_code" required>
+            <div id="accountDropdown"
+              style="position:absolute; z-index:9999; background:#fff; border:1px solid #ccc; border-radius:4px; max-height:200px; overflow-y:auto; width:100%; display:none;">
+            </div>
           </div>
 
-          <!-- ACCOUNT BALANCE -->
           <div class="col-md-6">
             <label class="form-label">Account Balance</label>
             <input type="text" id="accountBalance" class="form-control bg-light" readonly value="0.00">
           </div>
 
-          <!-- NARRATION -->
           <div class="col-md-12">
             <label class="form-label">Narration</label>
             <input type="text" name="description" class="form-control"
               value="<%= editData ? editData.description : '' %>">
           </div>
 
-          <!-- REFERENCE -->
           <div class="col-md-6">
             <label class="form-label">Reference</label>
             <input type="text" name="reference" class="form-control" value="<%= editData ? editData.reference : '' %>">
           </div>
 
-          <!-- INVOICE -->
           <div class="col-md-6">
             <label class="form-label">Invoice</label>
             <input type="text" name="invoice" class="form-control" value="<%= editData ? editData.invoice : '' %>">
           </div>
 
-          <!-- AMOUNT -->
           <div class="col-md-6">
             <label class="form-label">Amount</label>
             <input type="number" name="amount" step="0.01" class="form-control" required
               value="<%= editData ? editData.amount : '' %>">
           </div>
 
-          <!-- BATCH -->
           <div class="col-md-6">
             <label class="form-label">Batch Total</label>
             <input type="text" id="batch_total" class="form-control bg-light" readonly
               value="<%= editData ? editData.amount : '0.00' %>">
           </div>
 
-          <!-- CASH -->
           <div class="col-md-12">
             <label class="form-label">Cash in Hand</label>
             <input type="text" id="cashInHand" class="form-control bg-light" readonly value="0.00">
@@ -112,8 +99,6 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0/dist/css/select2.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0/dist/js/select2.min.js"></script>
 
 <script>
 $(document).ready(function () {
@@ -125,7 +110,7 @@ $(document).ready(function () {
   const cashCode = "<%= settings.cash_account_code %>";
   const voucherType = "<%= voucher_type %>";
 
-  // ================= DATE FIX (NO SHIFT) =================
+  // ================= DATE =================
   function formatToDB(dateObj) {
     return dateObj.getFullYear() + "-" +
       String(dateObj.getMonth() + 1).padStart(2, "0") + "-" +
@@ -133,12 +118,10 @@ $(document).ready(function () {
   }
 
   let initialDate;
-
   if (isEdit && editDate) {
-    // 🔥 IMPORTANT: manual split (NO timezone bug)
-    const parts = editDate.split("-");
-    initialDate = new Date(parts[0], parts[1] - 1, parts[2]);
-    $("#date").val(editDate);
+    const parts = editDate.toString().slice(0, 10).split("-");
+    initialDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    $("#date").val(parts.join("-"));
   } else {
     initialDate = new Date();
     $("#date").val(formatToDB(initialDate));
@@ -164,15 +147,121 @@ $(document).ready(function () {
       });
   }
 
-  // ================= ACCOUNT FIX =================
+  // ================= ACCOUNT SEARCH =================
+  const allAccounts = [
+    <% accounts.forEach((a, i) => { %>
+      { code: "<%= a.account_code %>", name: "<%- a.name.replace(/"/g, '&quot;') %>", label: "<%= a.account_code %> - <%- a.name.replace(/"/g, '&quot;') %>" }<%= i < accounts.length - 1 ? ',' : '' %>
+    <% }) %>
+  ];
+
+  const searchInput = document.getElementById('accountSearch');
+  const dropdown = document.getElementById('accountDropdown');
+  const hiddenInput = document.getElementById('account_code');
+  let highlightedIndex = -1;
+
+  function setAccount(a) {
+    searchInput.value = a.label;
+    hiddenInput.value = a.code;
+    dropdown.style.display = 'none';
+    highlightedIndex = -1;
+    fetchBalance(a.code, "#accountBalance");
+  }
+
+  function renderDropdown(search) {
+    dropdown.innerHTML = '';
+    highlightedIndex = -1;
+
+    if (!search) {
+      dropdown.style.display = 'none';
+      return;
+    }
+
+    const filtered = allAccounts.filter(a =>
+      a.code.toLowerCase().includes(search) ||
+      a.name.toLowerCase().includes(search)
+    ).slice(0, 50);
+
+    if (filtered.length === 0) {
+      dropdown.style.display = 'none';
+      return;
+    }
+
+    filtered.forEach((a, i) => {
+      const div = document.createElement('div');
+      div.textContent = a.label;
+      div.dataset.index = i;
+      div.style.cssText = 'padding:8px 12px; cursor:pointer; border-bottom:1px solid #eee; font-size:14px;';
+      div.addEventListener('mouseenter', () => {
+        highlightedIndex = i;
+        updateHighlight();
+      });
+      div.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        setAccount(a);
+      });
+      dropdown.appendChild(div);
+    });
+
+    dropdown._filtered = filtered;
+    dropdown.style.display = 'block';
+  }
+
+  function updateHighlight() {
+    const items = dropdown.querySelectorAll('div');
+    items.forEach((el, i) => {
+      el.style.background = i === highlightedIndex ? '#d0e8ff' : '#fff';
+    });
+    if (items[highlightedIndex]) {
+      items[highlightedIndex].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  searchInput.addEventListener('input', function() {
+    hiddenInput.value = '';
+    renderDropdown(this.value.toLowerCase());
+  });
+
+  searchInput.addEventListener('keydown', function(e) {
+    const items = dropdown._filtered || [];
+    if (!items.length) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
+      updateHighlight();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      highlightedIndex = Math.max(highlightedIndex - 1, 0);
+      updateHighlight();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightedIndex >= 0 && items[highlightedIndex]) {
+        setAccount(items[highlightedIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      dropdown.style.display = 'none';
+    }
+  });
+
+  searchInput.addEventListener('blur', () => {
+    setTimeout(() => dropdown.style.display = 'none', 200);
+  });
+
+  searchInput.addEventListener('focus', function() {
+    if (this.value) renderDropdown(this.value.toLowerCase());
+  });
+
   if (isEdit && editAccount) {
-    $("#account_code").val(String(editAccount));
+    const found = allAccounts.find(a => a.code === String(editAccount));
+    if (found) {
+      searchInput.value = found.label;
+      hiddenInput.value = found.code;
+    }
   }
 
   // ================= BALANCE =================
   async function fetchBalance(code, target) {
     if (!code) return $(target).val("0.00");
-
     try {
       const r = await fetch(`/api/account-balance/${code}`);
       const d = await r.json();
@@ -182,18 +271,13 @@ $(document).ready(function () {
     }
   }
 
-  $("#account_code").on("change", function () {
-    fetchBalance(this.value, "#accountBalance");
-  });
-
-  // 🔥 initial load
   if (isEdit && editAccount) {
     fetchBalance(editAccount, "#accountBalance");
   }
 
   fetchBalance(cashCode, "#cashInHand");
 
-  // ================= AMOUNT FIX =================
+  // ================= AMOUNT =================
   if (isEdit && editAmount) {
     const amt = parseFloat(editAmount);
     if (!isNaN(amt)) {
