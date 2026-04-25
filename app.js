@@ -302,38 +302,6 @@ app.post('/setup/settings', isAuthenticated, async (req, res) => {
 
 app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
   try {
-    function parseImportDate(val) {
-      if (!val) return null;
-
-      // Excel numeric date
-      if (typeof val === "number") {
-        const d = xlsx.SSF.parse_date_code(val);
-        if (!d) return null;
-        const mm = String(d.m).padStart(2, "0");
-        const dd = String(d.d).padStart(2, "0");
-        const yy = String(d.y);
-        return `${yy}-${mm}-${dd}`;
-      }
-
-      // YYYY-MM-DD
-      if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
-        return val;
-      }
-
-      // MM/DD/YYYY or MM/DD/YY
-      if (typeof val === "string" && val.includes("/")) {
-        const [mm, dd, yy] = val.split("/");
-        let year = yy;
-        if (yy.length === 2) {
-          year = Number(yy) > 50 ? "19" + yy : "20" + yy;
-        }
-        return `${year}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
-      }
-
-      return null;
-    }
-
-
     const filePath = req.file.path;
     const companyCode = req.session.user.company_code;
     const importType = req.body.import_type;
@@ -344,6 +312,7 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
 
     let accountCount = 0;
     let txnCount = 0;
+    let skippedCount = 0;
 
     const [[settings]] = await db.query(
       "SELECT cash_account_code FROM company_settings WHERE company_code = ?",
@@ -351,7 +320,7 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
     );
 
     const CASH = settings?.cash_account_code;
-    if (!CASH) throw new Error("Cash account not set");
+    if (!CASH) throw new Error("Cash account not set in company settings");
 
     const conn = await db.getConnection();
     await conn.beginTransaction();
@@ -361,122 +330,108 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
       /* ================= ACCOUNT IMPORT ================= */
       if (importType === "account") {
 
-        // 🔥 SAFE HEADER ACCESS
-        const group_code_raw = row.group_code || row.Group_Code || row["group code"];
-        const manual_code_raw = row.manual_code || row.manual_code || row["manual code"];
+        const code_raw = row.code || row.account_code || row.Code;
 
-        if (!group_code_raw || !manual_code_raw) {
-          console.log("Missing fields:", row);
+        if (!code_raw) {
+          console.log("Missing code field:", row);
+          skippedCount++;
           continue;
         }
 
-        // 🔥 FORCE STRING + FIX LEADING ZERO
-        let group_code = String(group_code_raw).trim().padStart(4, '0');
-        let manual_code = String(manual_code_raw).trim();
+        const full_code = String(code_raw).trim();
 
-        // ✅ VALIDATION
-        if (!/^\d{4}$/.test(group_code)) {
-          console.log("Invalid group_code:", group_code);
+        if (full_code.length < 5) {
+          console.log("Code too short:", full_code);
+          skippedCount++;
           continue;
         }
 
-        if (!/^\d{1,5}$/.test(manual_code)) {
-          console.log("Invalid manual_code:", manual_code);
+        if (!/^\d+$/.test(full_code)) {
+          console.log("Invalid code (non-numeric):", full_code);
+          skippedCount++;
           continue;
         }
 
-        // 🔥 FIND GROUP
+        // Pehle 4 digits = group_code
+        const group_code = full_code.slice(0, 4);
+
         const [[group]] = await conn.query(
           "SELECT id FROM `groups` WHERE group_code=? AND company_code=?",
           [group_code, companyCode]
         );
 
         if (!group) {
-          console.log("Group NOT FOUND in DB:", group_code);
+          console.log("Group NOT FOUND:", group_code);
+          skippedCount++;
           continue;
         }
 
-        // 🔥 FINAL ACCOUNT CODE
-        const suffix = manual_code.padStart(5, '0');
-        const account_code = group_code + suffix;
+        // 🔥 As-is store karo — koi padding nahi
+        const account_code = full_code;
 
         const name = (row.name || row.Name || "").toString().trim() || account_code;
         const opening_balance = Number(row.opening_balance || row.Opening_Balance || 0);
 
         try {
           await conn.query(`
-      INSERT INTO accounts
-      (group_id, account_code, name, opening_balance, company_code)
-      VALUES (?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        name = VALUES(name),
-        opening_balance = VALUES(opening_balance),
-        group_id = VALUES(group_id)
-    `, [
-            group.id,
-            account_code,
-            name,
-            opening_balance,
-            companyCode
-          ]);
+            INSERT INTO accounts
+            (group_id, account_code, name, opening_balance, company_code)
+            VALUES (?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+              name = VALUES(name),
+              opening_balance = VALUES(opening_balance),
+              group_id = VALUES(group_id)
+          `, [group.id, account_code, name, opening_balance, companyCode]);
 
           accountCount++;
-
         } catch (err) {
           console.log("Insert Error:", err.message);
+          skippedCount++;
         }
       }
 
       /* ================= TRANSACTION IMPORT ================= */
       if (importType === "transaction" && row.account_code && row.voucher_no) {
 
-        const entry_type = (row.type || "CB").toString().trim(); // CB / SP
-        const voucher_type = (row.voucher_type || "").toString().trim(); // RV / PV
-
+        const entry_type = (row.type || "CB").toString().trim();
+const voucher_type = (row.voucher_type || "").toString().trim().toUpperCase().replace(/\s+/g, '');
         if (!["RV", "PV"].includes(voucher_type)) {
           console.log("Invalid voucher_type:", voucher_type);
+          skippedCount++;
           continue;
         }
 
-        // ✅ DATE PARSE (DD/MM/YYYY)
         function parseDDMMYYYY(val) {
           if (!val) return null;
-
-          // Excel number date
           if (typeof val === "number") {
             const d = xlsx.SSF.parse_date_code(val);
             if (!d) return null;
             return `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`;
           }
-
-          // dd/mm/yyyy
           if (typeof val === "string" && val.includes("/")) {
             const [dd, mm, yy] = val.split("/");
-
             if (!dd || !mm || !yy) return null;
-
             let year = yy;
-            if (yy.length === 2) {
-              year = Number(yy) > 50 ? "19" + yy : "20" + yy;
-            }
-
+            if (yy.length === 2) year = Number(yy) > 50 ? "19" + yy : "20" + yy;
             return `${year}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
           }
-
+          if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
           return null;
         }
 
         const trxDate = parseDDMMYYYY(row.date);
         if (!trxDate) {
           console.log("Invalid date:", row.date);
+          skippedCount++;
           continue;
         }
 
         const voucher_no = row.voucher_no.toString().trim();
         const serial_no = row.serial_no ? parseInt(row.serial_no) : 1;
-        let account_code = row.account_code.toString().trim();
 
-        // ✅ ACCOUNT CHECK
+        // 🔥 account_code as-is
+        const account_code = row.account_code.toString().trim();
+
         const [[accExists]] = await conn.query(
           "SELECT id FROM accounts WHERE account_code=? AND company_code=?",
           [account_code, companyCode]
@@ -484,86 +439,54 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
 
         if (!accExists) {
           console.log("Account not found:", account_code);
+          skippedCount++;
           continue;
         }
 
         const debit = Number(row.debit || 0);
         const credit = Number(row.credit || 0);
 
-        if (debit === 0 && credit === 0) {
-          console.log("Empty amount");
-          continue;
-        }
+        // if (debit === 0 && credit === 0) {
+        //   console.log("Empty amount, skipping");
+        //   skippedCount++;
+        //   continue;
+        // }
 
         const description = row.description || null;
         const reference = row.reference || null;
         const invoice = row.invoice || null;
 
-        // ✅ CASH CODE
-        let CASH = row.cash_code;
+        const cashCode = row.cash_code ? row.cash_code.toString().trim() : CASH;
 
-        if (!CASH) {
-          const [[settings]] = await conn.query(
-            "SELECT cash_account_code FROM company_settings WHERE company_code=?",
-            [companyCode]
-          );
-          CASH = settings?.cash_account_code;
-        }
-
-        if (!CASH) {
+        if (!cashCode) {
           console.log("Cash account missing");
+          skippedCount++;
           continue;
         }
 
-        // ===== PARTY ENTRY =====
+        // PARTY ENTRY
         await conn.query(`
-    INSERT INTO transactions
-    (entry_type, voucher_type, date, voucher_no, serial_no,
-     account_code, debit, credit,
-     description, reference, invoice, company_code)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-          entry_type,
-          voucher_type,
-          trxDate,
-          voucher_no,
-          serial_no,
-          account_code,
-          debit,
-          credit,
-          description,
-          reference,
-          invoice,
-          companyCode
-        ]);
+          INSERT INTO transactions
+          (entry_type, voucher_type, date, voucher_no, serial_no,
+           account_code, debit, credit, description, reference, invoice, company_code)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [entry_type, voucher_type, trxDate, voucher_no, serial_no,
+            account_code, debit, credit, description, reference, invoice, companyCode]);
 
-        // ===== CASH ENTRY =====
+        // CASH ENTRY
         await conn.query(`
-    INSERT INTO transactions
-    (entry_type, voucher_type, date, voucher_no, serial_no,
-     account_code, debit, credit,
-     description, reference, invoice, company_code)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-          entry_type,
-          voucher_type,
-          trxDate,
-          voucher_no,
-          serial_no,
-          CASH,
-          credit,
-          debit,
-          description,
-          reference,
-          invoice,
-          companyCode
-        ]);
+          INSERT INTO transactions
+          (entry_type, voucher_type, date, voucher_no, serial_no,
+           account_code, debit, credit, description, reference, invoice, company_code)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [entry_type, voucher_type, trxDate, voucher_no, serial_no,
+            cashCode, credit, debit, description, reference, invoice, companyCode]);
 
         txnCount += 2;
       }
     }
 
-  await conn.commit();
+    await conn.commit();
     conn.release();
     fs.unlinkSync(filePath);
 
@@ -572,12 +495,12 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
       [companyCode]
     );
 
-    const successMsg = accountCount === 0 && txnCount === 0
-      ? null
-      : `✅ Import successful! ${accountCount} accounts, ${txnCount} transactions imported.`;
-
-    const errorMsg = accountCount === 0 && txnCount === 0
-      ? "❌ No data imported! Check column names in your file."
+    const total = accountCount + txnCount;
+    const successMsg = total > 0
+      ? `✅ Import successful! ${accountCount} accounts, ${txnCount / 2} transactions imported.${skippedCount > 0 ? ` (${skippedCount} rows skipped)` : ''}`
+      : null;
+    const errorMsg = total === 0
+      ? `❌ No data imported! ${skippedCount} rows skipped — check column names.`
       : null;
 
     return res.render('setup/settings', {
@@ -590,7 +513,6 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
 
   } catch (err) {
     console.error("IMPORT ERROR:", err);
-
     const [settingsData] = await db.query(
       'SELECT * FROM company_settings WHERE company_code = ?',
       [companyCode]
@@ -959,21 +881,19 @@ app.get('/api/next-voucher', isAuthenticated, async (req, res) => {
         ? (settings?.voucher_prefix_payment || '')
         : (settings?.voucher_prefix_receipt || '');
 
-    // 🔥 ALWAYS read last voucher (prefix or no prefix)
-    const startNumber = (voucherType === 'PV') ? 200001 : 100001;
-    const endNumber = (voucherType === 'PV') ? 299999 : 199999;
+    // 🔥 Series filter — RV = 1 se shuru, PV = 2 se shuru
+    const seriesStart = voucherType === 'PV' ? '2' : '1';
+    const defaultStart = voucherType === 'PV' ? 2000001 : 1000001;
 
     const [[last]] = await conn.query(`
-  SELECT voucher_no
-  FROM transactions
-  WHERE company_code = ?
-    AND voucher_type = ?
-    AND CAST(REGEXP_SUBSTR(voucher_no, '[0-9]+$') AS UNSIGNED)
-        BETWEEN ? AND ?
-  ORDER BY CAST(REGEXP_SUBSTR(voucher_no, '[0-9]+$') AS UNSIGNED) DESC
-  LIMIT 1
-`, [companyCode, voucherType, startNumber, endNumber]);
-
+      SELECT voucher_no
+      FROM transactions
+      WHERE company_code = ?
+        AND voucher_type = ?
+        AND REGEXP_SUBSTR(voucher_no, '[0-9]+$') REGEXP '^${seriesStart}'
+      ORDER BY CAST(REGEXP_SUBSTR(voucher_no, '[0-9]+$') AS UNSIGNED) DESC
+      LIMIT 1
+    `, [companyCode, voucherType]);
 
     let lastNumber = 0;
     if (last?.voucher_no) {
@@ -981,7 +901,7 @@ app.get('/api/next-voucher', isAuthenticated, async (req, res) => {
       if (m) lastNumber = parseInt(m[0]);
     }
 
-    const nextNumber = lastNumber > 0 ? lastNumber + 1 : startNumber;
+    const nextNumber = lastNumber > 0 ? lastNumber + 1 : defaultStart;
 
     res.json({
       success: true,
@@ -1276,18 +1196,14 @@ app.get('/trial-balance', isAuthenticated, async (req, res) => {
        ORDER BY name`,
       [companyCode]
     );
-
-    res.render('trial-balance', {
-      accounts,
-      company_code: companyCode
-    });
+    res.render('trial-balance', { accounts, company_code: companyCode });
   } catch (err) {
     console.error('Trial Balance page error:', err);
     res.status(500).send('Error loading trial balance filter.');
   }
 });
 
-// TRIAL BALANCE - result (optimized)
+// TRIAL BALANCE - result
 app.post('/trial-balance-result', isAuthenticated, async (req, res) => {
   try {
     const companyCode = req.session.user.company_code;
@@ -1301,7 +1217,6 @@ app.post('/trial-balance-result', isAuthenticated, async (req, res) => {
     const sDate = parseDMY(start_date);
     const eDate = parseDMY(end_date);
 
-    // ✅ QUERY (IMPORTANT - rows yahin define ho raha hai)
     const query = `
       SELECT
         g.group_code,
@@ -1325,15 +1240,10 @@ app.post('/trial-balance-result', isAuthenticated, async (req, res) => {
       ORDER BY g.group_code, a.account_code
     `;
 
-    const [rows] = await db.query(query, [
-      companyCode,
-      sDate,
-      eDate,
-      companyCode
-    ]);
+    const [rows] = await db.query(query, [companyCode, sDate, eDate, companyCode]);
 
-    // ===== GROUP BUILD =====
     const groups = {};
+    let sno = 1;
 
     rows.forEach(r => {
       const balance =
@@ -1358,6 +1268,8 @@ app.post('/trial-balance-result', isAuthenticated, async (req, res) => {
       }
 
       groups[r.group_code].accounts.push({
+        sno: sno++,
+        account_code: r.account_code,
         account_name: r.account_name,
         debit,
         credit
@@ -1367,19 +1279,15 @@ app.post('/trial-balance-result', isAuthenticated, async (req, res) => {
       groups[r.group_code].total_credit += credit;
     });
 
-    // ✅ GROUP DIFFERENCE
     Object.values(groups).forEach(g => {
       g.difference = g.total_debit - g.total_credit;
     });
 
-    // ✅ GRAND TOTAL
     let grand = { debit: 0, credit: 0, difference: 0 };
-
     Object.values(groups).forEach(g => {
       grand.debit += g.total_debit;
       grand.credit += g.total_credit;
     });
-
     grand.difference = grand.debit - grand.credit;
 
     res.render('trial-balance-result', {
