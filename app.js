@@ -352,7 +352,6 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
           continue;
         }
 
-        // Pehle 4 digits = group_code
         const group_code = full_code.slice(0, 4);
 
         const [[group]] = await conn.query(
@@ -366,9 +365,7 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
           continue;
         }
 
-        // 🔥 As-is store karo — koi padding nahi
         const account_code = full_code;
-
         const name = (row.name || row.Name || "").toString().trim() || account_code;
         const opening_balance = Number(row.opening_balance || row.Opening_Balance || 0);
 
@@ -382,7 +379,6 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
               opening_balance = VALUES(opening_balance),
               group_id = VALUES(group_id)
           `, [group.id, account_code, name, opening_balance, companyCode]);
-
           accountCount++;
         } catch (err) {
           console.log("Insert Error:", err.message);
@@ -394,12 +390,9 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
       if (importType === "transaction" && row.account_code && row.voucher_no) {
 
         const entry_type = (row.type || "CB").toString().trim();
-const voucher_type = (row.voucher_type || "").toString().trim().toUpperCase().replace(/\s+/g, '');
-        if (!["RV", "PV"].includes(voucher_type)) {
-          console.log("Invalid voucher_type:", voucher_type);
-          skippedCount++;
-          continue;
-        }
+
+        const voucher_type_raw = (row.voucher_type || "").toString().trim().toUpperCase().replace(/\s+/g, '');
+        const voucher_type = ["RV", "PV"].includes(voucher_type_raw) ? voucher_type_raw : "RV";
 
         function parseDDMMYYYY(val) {
           if (!val) return null;
@@ -428,38 +421,64 @@ const voucher_type = (row.voucher_type || "").toString().trim().toUpperCase().re
 
         const voucher_no = row.voucher_no.toString().trim();
         const serial_no = row.serial_no ? parseInt(row.serial_no) : 1;
-
-        // 🔥 account_code as-is
         const account_code = row.account_code.toString().trim();
 
-        const [[accExists]] = await conn.query(
+        // 🔥 Account check — nahi mila to auto create
+        let [[accExists]] = await conn.query(
           "SELECT id FROM accounts WHERE account_code=? AND company_code=?",
           [account_code, companyCode]
         );
 
         if (!accExists) {
-          console.log("Account not found:", account_code);
-          skippedCount++;
-          continue;
+          // Auto create — group pehle 4 digits se
+          const auto_group_code = account_code.slice(0, 4);
+          const [[autoGroup]] = await conn.query(
+            "SELECT id FROM `groups` WHERE group_code=? AND company_code=?",
+            [auto_group_code, companyCode]
+          );
+
+          if (autoGroup) {
+            await conn.query(`
+              INSERT INTO accounts (group_id, account_code, name, opening_balance, company_code)
+              VALUES (?, ?, ?, 0, ?)
+              ON DUPLICATE KEY UPDATE account_code = account_code
+            `, [autoGroup.id, account_code, account_code, companyCode]);
+            console.log("✅ Auto created account:", account_code);
+
+            // Naya insert hua — refetch karo
+            [[accExists]] = await conn.query(
+              "SELECT id FROM accounts WHERE account_code=? AND company_code=?",
+              [account_code, companyCode]
+            );
+          } else {
+            console.log("❌ Group not found for auto-create:", account_code);
+            skippedCount++;
+            continue;
+          }
         }
 
         const debit = Number(row.debit || 0);
         const credit = Number(row.credit || 0);
 
-        // if (debit === 0 && credit === 0) {
-        //   console.log("Empty amount, skipping");
-        //   skippedCount++;
-        //   continue;
-        // }
-
         const description = row.description || null;
         const reference = row.reference || null;
         const invoice = row.invoice || null;
 
-        const cashCode = row.cash_code ? row.cash_code.toString().trim() : CASH;
+        // 🔥 Cash code — validate karo, fallback CASH
+        let cashCode = row.cash_code ? row.cash_code.toString().trim() : CASH;
+
+        const [[cashExists]] = await conn.query(
+          "SELECT id FROM accounts WHERE account_code=? AND company_code=?",
+          [cashCode, companyCode]
+        );
+
+        if (!cashExists) {
+          console.log(`Cash code ${cashCode} not found, using default: ${CASH}`);
+          cashCode = CASH;
+        }
 
         if (!cashCode) {
-          console.log("Cash account missing");
+          console.log("Cash account missing, skipping");
           skippedCount++;
           continue;
         }
@@ -747,36 +766,56 @@ app.get('/gl/add-transaction', isAuthenticated, async (req, res) => {
 
   let editData = null;
 
-  // ===== EDIT MODE =====
   if (voucher_no) {
     const [rows] = await db.query(
       `SELECT * FROM transactions
-     WHERE voucher_no = ? AND company_code = ?
-     ORDER BY id`,
+       WHERE voucher_no = ? AND company_code = ?
+       ORDER BY id`,
       [voucher_no, companyCode]
     );
 
     if (!rows.length) return res.send("Voucher not found");
 
-    let partyRow;
+    const cashAccount = settings?.cash_account_code;
 
-    if (voucher_type === "RV") {
-      partyRow = rows.find(r => Number(r.debit) > 0);
+    // 🔥 Party row = cash account ke ilawa
+    let partyRow = rows.find(r => r.account_code !== cashAccount);
+
+    // Fallback — agar imported data mein cash account alag tha
+    if (!partyRow) partyRow = rows[0];
+
+    // 🔥 Cash row = party ke ilawa
+    const cashRow = rows.find(r => r.account_code !== partyRow.account_code);
+
+    // 🔥 Amount — party row se
+    const amount = Number(partyRow.debit) > 0
+      ? Number(partyRow.debit)
+      : Number(partyRow.credit) > 0
+        ? Number(partyRow.credit)
+        : 0;
+
+    // 🔥 Date — timezone fix
+    const rawDate = partyRow.date;
+    let dateStr;
+    if (rawDate instanceof Date) {
+      const y = rawDate.getFullYear();
+      const m = String(rawDate.getMonth() + 1).padStart(2, '0');
+      const d = String(rawDate.getDate()).padStart(2, '0');
+      dateStr = `${y}-${m}-${d}`;
     } else {
-      partyRow = rows.find(r => Number(r.credit) > 0);
+      dateStr = String(rawDate).slice(0, 10);
     }
-
-    if (!partyRow) return res.send("Invalid voucher data");
 
     editData = {
       voucher_no,
-      date: partyRow.date.toISOString().slice(0, 10),
+      date: dateStr,
       serial_no: partyRow.serial_no,
       account_code: partyRow.account_code,
+      cash_account: cashRow?.account_code || cashAccount,
       description: partyRow.description,
       reference: partyRow.reference,
       invoice: partyRow.invoice,
-      amount: Number(partyRow.debit || partyRow.credit)
+      amount
     };
   }
 
@@ -797,15 +836,15 @@ app.post('/gl/add-transaction', isAuthenticated, async (req, res) => {
   } = req.body;
 
   const companyCode = req.session.user.company_code;
-  const amt = Number(amount);
-  const serialNo = (serial_no && serial_no.toString().trim() !== '') ? parseInt(serial_no) : 1; // ← FIX
+  const amt = Number(amount) || 0;
+  const serialNo = (serial_no && serial_no.toString().trim() !== '') ? parseInt(serial_no) : 1;
 
   const [[settings]] = await db.query(
     "SELECT cash_account_code FROM company_settings WHERE company_code = ?",
     [companyCode]
   );
 
-  const CASH = settings.cash_account_code;
+  const CASH = req.body.cash_account || settings.cash_account_code;
   if (!CASH) return res.json({ success: false, message: "Cash account not set" });
 
   const conn = await db.getConnection();
@@ -813,41 +852,87 @@ app.post('/gl/add-transaction', isAuthenticated, async (req, res) => {
     await conn.beginTransaction();
 
     if (is_edit === "1") {
+      // 🔥 Edit mode mein pehle cash entry dhundho — us ka cash code save karo
+      const [oldRows] = await conn.query(
+        "SELECT * FROM transactions WHERE voucher_no=? AND company_code=?",
+        [voucher_no, companyCode]
+      );
+
+      // Cash row — jo party account ke ilawa hai
+      const oldParty = oldRows.find(r => r.account_code !== CASH);
+      const oldCash = oldRows.find(r => r.account_code !== oldParty?.account_code);
+
       await conn.query(
         "DELETE FROM transactions WHERE voucher_no=? AND company_code=?",
         [voucher_no, companyCode]
       );
+
+      // 🔥 Edit mein original cash code use karo agar alag tha
+      const useCash = oldCash?.account_code || CASH;
+
+      // PARTY ENTRY
+      await conn.query(`
+        INSERT INTO transactions
+        (entry_type, voucher_type, date, voucher_no, serial_no,
+         account_code, debit, credit, description, reference, invoice, company_code)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          entry_type, voucher_type, date, voucher_no, serialNo,
+          account_code,
+          voucher_type === "PV" ? amt : 0,
+          voucher_type === "RV" ? amt : 0,
+          description, reference, invoice, companyCode
+        ]
+      );
+
+      // CASH ENTRY
+      await conn.query(`
+        INSERT INTO transactions
+        (entry_type, voucher_type, date, voucher_no, serial_no,
+         account_code, debit, credit, description, reference, invoice, company_code)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          entry_type, voucher_type, date, voucher_no, serialNo,
+          useCash,
+          voucher_type === "RV" ? amt : 0,
+          voucher_type === "PV" ? amt : 0,
+          description, reference, invoice, companyCode
+        ]
+      );
+
+    } else {
+      // NEW TRANSACTION
+
+      // PARTY ENTRY
+      await conn.query(`
+        INSERT INTO transactions
+        (entry_type, voucher_type, date, voucher_no, serial_no,
+         account_code, debit, credit, description, reference, invoice, company_code)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          entry_type, voucher_type, date, voucher_no, serialNo,
+          account_code,
+          voucher_type === "PV" ? amt : 0,
+          voucher_type === "RV" ? amt : 0,
+          description, reference, invoice, companyCode
+        ]
+      );
+
+      // CASH ENTRY
+      await conn.query(`
+        INSERT INTO transactions
+        (entry_type, voucher_type, date, voucher_no, serial_no,
+         account_code, debit, credit, description, reference, invoice, company_code)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          entry_type, voucher_type, date, voucher_no, serialNo,
+          CASH,
+          voucher_type === "RV" ? amt : 0,
+          voucher_type === "PV" ? amt : 0,
+          description, reference, invoice, companyCode
+        ]
+      );
     }
-
-    // PARTY ENTRY
-    await conn.query(`
-      INSERT INTO transactions
-      (entry_type, voucher_type, date, voucher_no, serial_no,
-       account_code, debit, credit, description, reference, invoice, company_code)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        entry_type, voucher_type, date, voucher_no, serialNo,
-        account_code,
-        voucher_type === "PV" ? amt : 0,
-        voucher_type === "RV" ? amt : 0,
-        description, reference, invoice, companyCode
-      ]
-    );
-
-    // CASH ENTRY
-    await conn.query(`
-      INSERT INTO transactions
-      (entry_type, voucher_type, date, voucher_no, serial_no,
-       account_code, debit, credit, description, reference, invoice, company_code)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        entry_type, voucher_type, date, voucher_no, serialNo,
-        CASH,
-        voucher_type === "RV" ? amt : 0,
-        voucher_type === "PV" ? amt : 0,
-        description, reference, invoice, companyCode
-      ]
-    );
 
     await conn.commit();
     res.json({ success: true, message: is_edit === "1" ? "Transaction Updated" : "Transaction Saved" });
@@ -1444,35 +1529,32 @@ app.get('/search', isAuthenticated, async (req, res) => {
 
   const CASH = settings?.cash_account_code;
 
+  // 🔥 Har voucher ke liye party row fetch karo (non-cash row)
   const [rows] = await db.query(`
     SELECT
       t.voucher_no,
-      DATE_FORMAT(MAX(t.date),'%d-%m-%Y') AS date,
-      MAX(t.voucher_type) AS voucher_type,   -- ✅ IMPORTANT
-      MAX(a.account_code) AS account_code,
-      MAX(a.name) AS account_name,
-      MAX(t.description) AS description,
-      MAX(t.reference) AS reference,
-
-      SUM(CASE WHEN t.debit > 0 THEN t.debit ELSE 0 END) AS debit,
-      SUM(CASE WHEN t.credit > 0 THEN t.credit ELSE 0 END) AS credit
-
+      DATE_FORMAT(t.date,'%d-%m-%Y') AS date,
+      t.voucher_type,
+      t.account_code,
+      a.name AS account_name,
+      t.description,
+      t.reference,
+      t.debit,
+      t.credit
     FROM transactions t
     JOIN accounts a
       ON a.account_code = t.account_code
      AND a.company_code = t.company_code
-
     WHERE t.company_code = ?
-      AND t.account_code != ?   -- ❌ CASH remove
+      AND t.account_code != ?
       AND (
         t.voucher_no LIKE ?
         OR a.name LIKE ?
         OR t.description LIKE ?
         OR t.reference LIKE ?
       )
-
     GROUP BY t.voucher_no
-    ORDER BY MAX(t.date) DESC
+    ORDER BY MAX(t.date) DESC, t.voucher_no DESC
     LIMIT 100
   `, [
     company_code,
@@ -1483,69 +1565,13 @@ app.get('/search', isAuthenticated, async (req, res) => {
     `%${query}%`
   ]);
 
-  const vouchers = rows.map(r => ({
-    ...r
-  }));
-
   res.render('search-results', {
-    vouchers,
+    vouchers: rows,
     message: rows.length ? null : 'Transaction not found',
     query
   });
 });
 
-app.get('/gl/edit-transaction/:voucher_no', isAuthenticated, async (req, res) => {
-  const { voucher_no } = req.params;
-  const company_code = req.session.user.company_code;
-
-  // 🔥 GET CASH ACCOUNT
-  const [[settings]] = await db.query(
-    "SELECT cash_account_code FROM company_settings WHERE company_code=?",
-    [company_code]
-  );
-
-  const CASH = settings.cash_account_code;
-
-  // 🔥 GET BOTH ENTRIES
-  const [rows] = await db.query(`
-    SELECT *
-    FROM transactions
-    WHERE voucher_no = ?
-      AND company_code = ?
-  `, [voucher_no, company_code]);
-
-  if (!rows.length) {
-    return res.status(404).send("Voucher not found");
-  }
-
-  // 🔥 FIND PARTY ENTRY (non-cash)
-  const party = rows.find(r => r.account_code !== CASH);
-
-  const editData = {
-    voucher_no,
-    date: party.date,
-    account_code: party.account_code,
-    serial_no: party.serial_no,
-    description: party.description,
-    reference: party.reference,
-    invoice: party.invoice,
-    amount: party.debit > 0 ? party.debit : party.credit,
-    voucher_type: party.voucher_type
-  };
-
-  const [accounts] = await db.query(
-    `SELECT account_code, name FROM accounts WHERE company_code = ?`,
-    [company_code]
-  );
-
-  res.render('gl/add-transaction', {
-    editData,
-    accounts,
-    settings,
-    voucher_type: editData.voucher_type,
-    entry_type: 'CB'
-  });
-});
 
 app.post('/gl/delete-voucher/:voucher_no', isAuthenticated, async (req, res) => {
   const { voucher_no } = req.params;
