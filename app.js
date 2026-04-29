@@ -532,9 +532,13 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
 
   } catch (err) {
     console.error("IMPORT ERROR:", err);
+
+    // 🔥 conn release karo agar open hai
+    try { if (conn) { await conn.rollback(); conn.release(); } } catch(e) {}
+
     const [settingsData] = await db.query(
       'SELECT * FROM company_settings WHERE company_code = ?',
-      [companyCode]
+      [companyCode]   // ← ye upper scope se aana chahiye
     ).catch(() => [[]]);
 
     return res.render('setup/settings', {
