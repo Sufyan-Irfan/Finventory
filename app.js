@@ -25,6 +25,12 @@ const wb = new ExcelJS.Workbook();
 const ws = wb.addWorksheet('Trial Balance');
 const upload = multer({ dest: "uploads/" });
 
+function fmt(n) {
+  return Number(n || 0)
+    .toFixed(2)
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -1249,7 +1255,6 @@ app.post('/report-result', isAuthenticated, async (req, res) => {
     }
 
     // ================= ENTRY TYPE =================
-    // ================= TRANSACTIONS (FINAL FIX) =================
     let transactionsQuery = `
   SELECT
     DATE_FORMAT(date,'%d-%m-%Y') AS formatted_date,
@@ -1277,12 +1282,14 @@ app.post('/report-result', isAuthenticated, async (req, res) => {
 
     const [transactions] = await db.query(transactionsQuery, params);
 
-    res.render('report-result', {
-      transactions,
-      party,
-      start_date,
-      end_date
-    });
+   res.render('report-result', {
+  transactions,
+  party,
+  start_date,
+  end_date,
+  account_code: account,
+  fmt
+}); 
 
   } catch (err) {
     console.error('REPORT ERROR:', err);
@@ -1400,6 +1407,7 @@ app.post('/trial-balance-result', isAuthenticated, async (req, res) => {
       grand,
       start_date,
       end_date,
+      fmt,
       company_code: companyCode
     });
 
@@ -1511,6 +1519,7 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
       opening,
       start_date,
       end_date,
+      fmt,
       company_code,
       cash_account: CASH
     });
@@ -1524,6 +1533,7 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
       opening: 0,
       start_date,
       end_date,
+      fmt,
       company_code,
       cash_account: CASH || ''
     });

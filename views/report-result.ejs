@@ -1,25 +1,16 @@
 <!DOCTYPE html>
 <html>
-
 <head>
   <title>Ledger Report</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-
 <body class="container mt-4">
 
-  <h4>
-    Ledger :
-    <%= party.name %>
-  </h4>
-  <p>From <strong>
-      <%= start_date %>
-    </strong> to <strong>
-      <%= end_date %>
-    </strong></p>
+  <h4>Ledger : <%= account_code %> - <%= party.name %></h4>
+  <p>From <strong><%= start_date %></strong> to <strong><%= end_date %></strong></p>
 
   <div class="mb-3">
-    <button onclick="exportPDF()" class="btn btn-outline-dark btn-sm me-2">📄 PDF</button>
+    <button onclick="exportPDF()"   class="btn btn-outline-dark btn-sm me-2">📄 PDF</button>
     <button onclick="exportExcel()" class="btn btn-outline-success btn-sm">📁 Excel</button>
   </div>
 
@@ -36,162 +27,137 @@
     </thead>
     <tbody>
 
-      <% let balance=Number(party.opening_balance || 0); %>
-        <% let totalDebit=0, totalCredit=0; %>
+      <% let balance = Number(party.opening_balance || 0); %>
+      <% let totalDebit = 0, totalCredit = 0; %>
 
-          <tr class="fw-bold">
-            <td colspan="5">Opening Balance</td>
-            <td class="text-end">
-              <%= balance.toFixed(2) %>
-            </td>
-          </tr>
+      <tr class="fw-bold">
+        <td colspan="5">Opening Balance</td>
+        <td class="text-end"><%= fmt(balance) %></td>
+      </tr>
 
-          <% transactions.forEach(t=> {
-            const d = Number(t.debit || 0);
-            const c = Number(t.credit || 0);
-            balance += d - c;
-            totalDebit += d;
-            totalCredit += c;
-            %>
-            <tr>
-              <td>
-                <%= t.formatted_date %>
-              </td>
-              <td>
-                <%= t.voucher_no || '-' %>
-              </td>
-              <td>
-                <%= t.description || '-' %>
-              </td>
-              <td class="text-end">
-                <%= d ? d.toFixed(2) : '' %>
-              </td>
-              <td class="text-end">
-                <%= c ? c.toFixed(2) : '' %>
-              </td>
-              <td class="text-end">
-                <%= balance.toFixed(2) %>
-              </td>
-            </tr>
-            <% }) %>
+      <% transactions.forEach(t => {
+        const d = Number(t.debit  || 0);
+        const c = Number(t.credit || 0);
+        balance     += d - c;
+        totalDebit  += d;
+        totalCredit += c;
+      %>
+        <tr>
+          <td><%= t.formatted_date %></td>
+          <td><%= t.voucher_no || '-' %></td>
+          <td><%= t.description || '-' %></td>
+          <td class="text-end"><%= d ? fmt(d) : '' %></td>
+          <td class="text-end"><%= c ? fmt(c) : '' %></td>
+          <td class="text-end"><%= fmt(balance) %></td>
+        </tr>
+      <% }) %>
 
-              <tr class="fw-bold table-secondary">
-                <td colspan="3">TOTAL</td>
-                <td class="text-end">
-                  <%= totalDebit.toFixed(2) %>
-                </td>
-                <td class="text-end">
-                  <%= totalCredit.toFixed(2) %>
-                </td>
-                <td class="text-end">
-                  <%= balance.toFixed(2) %>
-                </td>
-              </tr>
+      <tr class="fw-bold table-secondary">
+        <td colspan="3">TOTAL</td>
+        <td class="text-end"><%= fmt(totalDebit) %></td>
+        <td class="text-end"><%= fmt(totalCredit) %></td>
+        <td class="text-end"><%= fmt(balance) %></td>
+      </tr>
 
     </tbody>
   </table>
 
   <a href="/report">← Back</a>
 
-  <!-- LIBS -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
-<script>
-const report = <%- JSON.stringify({ party, transactions }) %>;
+  <script>
+    const report = <%- JSON.stringify({ party, transactions, start_date, end_date }) %>;
 
-// ================= EXCEL =================
-function exportExcel() {
-  const data = [
-    ['Date', 'Voucher', 'Description', 'Debit', 'Credit', 'Balance']
-  ];
+    function fmtExport(n) {
+      return Number(n || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
 
-  let bal = Number(report.party.opening_balance || 0);
-  let totalDebit = 0;
-  let totalCredit = 0;
+    /* ================= EXCEL ================= */
+    function exportExcel() {
+      const rows = [['Date', 'Voucher', 'Description', 'Debit', 'Credit', 'Balance']];
 
-  data.push(['', '', 'Opening Balance', '', '', bal]);
+      let bal = Number(report.party.opening_balance || 0);
+      let totalDebit = 0, totalCredit = 0;
 
-  report.transactions.forEach(t => {
-    const d = Number(t.debit || 0);
-    const c = Number(t.credit || 0);
+      rows.push(['', '', 'Opening Balance', '', '', fmtExport(bal)]);
 
-    totalDebit += d;
-    totalCredit += c;
-    bal += d - c;
+      report.transactions.forEach(t => {
+        const d = Number(t.debit  || 0);
+        const c = Number(t.credit || 0);
+        totalDebit  += d;
+        totalCredit += c;
+        bal += d - c;
+        rows.push([
+          t.formatted_date,
+          t.voucher_no  || '',
+          t.description || '',
+          d ? fmtExport(d) : '',
+          c ? fmtExport(c) : '',
+          fmtExport(bal)
+        ]);
+      });
 
-    data.push([
-      t.formatted_date,
-      t.voucher_no || '',
-      t.description || '',
-      d,
-      c,
-      bal
-    ]);
-  });
+      rows.push(['', '', 'TOTAL', fmtExport(totalDebit), fmtExport(totalCredit), fmtExport(bal)]);
 
-  // ✅ TOTAL
-  data.push(['', '', 'TOTAL', totalDebit, totalCredit, bal]);
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, 'Ledger');
+      XLSX.writeFile(wb, `Ledger_${report.party.name}_${report.start_date}_${report.end_date}.xlsx`);
+    }
 
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  XLSX.utils.book_append_sheet(wb, ws, 'Ledger');
-  XLSX.writeFile(wb, 'ledger.xlsx');
-}
+    /* ================= PDF ================= */
+    function exportPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF('p', 'pt', 'a4');
 
-// ================= PDF =================
-function exportPDF() {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF('p', 'pt', 'a4');
+      doc.setFontSize(12);
+      doc.text(`Ledger: ${report.party.name}`, 40, 30);
+      doc.setFontSize(9);
+      doc.text(`${report.start_date} - ${report.end_date}`, 40, 48);
 
-  doc.setFontSize(12);
-  doc.text(`Ledger: ${report.party.name}`, 40, 30);
+      let bal = Number(report.party.opening_balance || 0);
+      let totalDebit = 0, totalCredit = 0;
+      const rows = [];
 
-  let bal = Number(report.party.opening_balance || 0);
-  let totalDebit = 0;
-  let totalCredit = 0;
+      rows.push(['', '', 'Opening Balance', '', '', fmtExport(bal)]);
 
-  const rows = [];
+      report.transactions.forEach(t => {
+        const d = Number(t.debit  || 0);
+        const c = Number(t.credit || 0);
+        totalDebit  += d;
+        totalCredit += c;
+        bal += d - c;
+        rows.push([
+          t.formatted_date,
+          t.voucher_no  || '',
+          t.description || '',
+          d ? fmtExport(d) : '',
+          c ? fmtExport(c) : '',
+          fmtExport(bal)
+        ]);
+      });
 
-  rows.push(['', '', 'Opening Balance', '', '', bal.toFixed(2)]);
+      rows.push(['', '', 'TOTAL', fmtExport(totalDebit), fmtExport(totalCredit), fmtExport(bal)]);
 
-  report.transactions.forEach(t => {
-    const d = Number(t.debit || 0);
-    const c = Number(t.credit || 0);
+      doc.autoTable({
+        head: [['Date', 'Voucher', 'Description', 'Debit', 'Credit', 'Balance']],
+        body: rows,
+        startY: 60,
+        styles: { fontSize: 8 },
+        theme: 'grid',
+        columnStyles: {
+          3: { halign: 'right' },
+          4: { halign: 'right' },
+          5: { halign: 'right' }
+        }
+      });
 
-    totalDebit += d;
-    totalCredit += c;
-    bal += d - c;
-
-    rows.push([
-      t.formatted_date,
-      t.voucher_no || '',
-      t.description || '',
-      d ? d.toFixed(2) : '',
-      c ? c.toFixed(2) : '',
-      bal.toFixed(2)
-    ]);
-  });
-
-  // ✅ TOTAL ROW
-  rows.push([
-    '', '', 'TOTAL',
-    totalDebit.toFixed(2),
-    totalCredit.toFixed(2),
-    bal.toFixed(2)
-  ]);
-
-  doc.autoTable({
-    head: [['Date', 'Voucher', 'Description', 'Debit', 'Credit', 'Balance']],
-    body: rows,
-    startY: 50
-  });
-
-  window.open(doc.output('bloburl'), '_blank');
-}
-</script>
+      window.open(doc.output('bloburl'), '_blank');
+    }
+  </script>
 
 </body>
-
 </html>

@@ -50,21 +50,21 @@
               <td class="ps-4"><%= a.sno %></td>
               <td class="ps-4"><%= a.account_code %></td>
               <td class="ps-4"><%= a.account_name %></td>
-              <td class="text-end"><%= a.debit > 0 ? Number(a.debit).toFixed(2) : '' %></td>
-              <td class="text-end"><%= a.credit > 0 ? Number(a.credit).toFixed(2) : '' %></td>
+              <td class="text-end"><%= a.debit > 0 ? fmt(a.debit) : '' %></td>
+              <td class="text-end"><%= a.credit > 0 ? fmt(a.credit) : '' %></td>
             </tr>
           <% }) %>
 
           <!-- GROUP TOTAL -->
           <tr class="fw-bold bg-light">
             <td colspan="3" class="text-end">Group Total</td>
-            <td class="text-end"><%= g.total_debit.toFixed(2) %></td>
-            <td class="text-end"><%= g.total_credit.toFixed(2) %></td>
+            <td class="text-end"><%= fmt(g.total_debit) %></td>
+            <td class="text-end"><%= fmt(g.total_credit) %></td>
           </tr>
 
           <tr class="fw-bold text-danger">
             <td colspan="3" class="text-end">Difference</td>
-            <td colspan="2" class="text-end"><%= g.difference.toFixed(2) %></td>
+            <td colspan="2" class="text-end"><%= fmt(g.difference) %></td>
           </tr>
 
         <% }) %>
@@ -72,13 +72,13 @@
         <!-- GRAND TOTAL -->
         <tr class="fw-bold table-dark">
           <td colspan="3" class="text-end">Grand Total</td>
-          <td class="text-end"><%= grand.debit.toFixed(2) %></td>
-          <td class="text-end"><%= grand.credit.toFixed(2) %></td>
+          <td class="text-end"><%= fmt(grand.debit) %></td>
+          <td class="text-end"><%= fmt(grand.credit) %></td>
         </tr>
 
         <tr class="fw-bold text-warning">
           <td colspan="3" class="text-end">Difference</td>
-          <td colspan="2" class="text-end"><%= grand.difference.toFixed(2) %></td>
+          <td colspan="2" class="text-end"><%= fmt(grand.difference) %></td>
         </tr>
 
       </tbody>
@@ -94,6 +94,15 @@
   <script>
     const report = <%- JSON.stringify({ groups, grand, start_date, end_date, company_code }) %>;
 
+    // JS formatter — same style as server fmt
+    function fmt(n) {
+      return Number(n || 0).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    // For exports — plain number with commas (no locale issues in xlsx/pdf)
+    function fmtExport(n) {
+      return Number(n || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
     /* ===================== EXCEL ===================== */
     function exportExcel() {
       const sheet = [];
@@ -104,28 +113,23 @@
       sheet.push(['S.No', 'Code', 'Name', 'Debit', 'Credit']);
 
       report.groups.forEach(g => {
-        // Group header
         sheet.push(['', g.group_code, g.group_name, '', '']);
-
-        // Accounts
         g.accounts.forEach(a => {
           sheet.push([
             a.sno,
             a.account_code,
             a.account_name,
-            a.debit ? Number(a.debit).toFixed(2) : '',
-            a.credit ? Number(a.credit).toFixed(2) : ''
+            a.debit  ? fmtExport(a.debit)  : '',
+            a.credit ? fmtExport(a.credit) : ''
           ]);
         });
-
-        // Group total
-        sheet.push(['', '', 'Group Total', Number(g.total_debit).toFixed(2), Number(g.total_credit).toFixed(2)]);
-        sheet.push(['', '', 'Difference', '', Number(g.difference).toFixed(2)]);
+        sheet.push(['', '', 'Group Total', fmtExport(g.total_debit), fmtExport(g.total_credit)]);
+        sheet.push(['', '', 'Difference',  '',                       fmtExport(g.difference)]);
         sheet.push([]);
       });
 
-      sheet.push(['', '', 'Grand Total', Number(report.grand.debit).toFixed(2), Number(report.grand.credit).toFixed(2)]);
-      sheet.push(['', '', 'Difference', '', Number(report.grand.difference).toFixed(2)]);
+      sheet.push(['', '', 'Grand Total', fmtExport(report.grand.debit),  fmtExport(report.grand.credit)]);
+      sheet.push(['', '', 'Difference',  '',                             fmtExport(report.grand.difference)]);
 
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.aoa_to_sheet(sheet);
@@ -146,56 +150,16 @@
       const body = [];
 
       report.groups.forEach(g => {
-        // Group header
-        body.push([{
-          content: `${g.group_code} — ${g.group_name}`,
-          colSpan: 5,
-          styles: { fillColor: [220, 220, 220], fontStyle: 'bold' }
-        }]);
-
-        // Accounts
+        body.push([{ content: `${g.group_code} — ${g.group_name}`, colSpan: 5, styles: { fillColor: [220,220,220], fontStyle: 'bold' } }]);
         g.accounts.forEach(a => {
-          body.push([
-            a.sno,
-            a.account_code,
-            a.account_name,
-            a.debit ? Number(a.debit).toFixed(2) : '',
-            a.credit ? Number(a.credit).toFixed(2) : ''
-          ]);
+          body.push([a.sno, a.account_code, a.account_name, a.debit ? fmtExport(a.debit) : '', a.credit ? fmtExport(a.credit) : '']);
         });
-
-        // Group total
-        body.push([{
-          content: 'Group Total',
-          colSpan: 3,
-          styles: { fontStyle: 'bold' }
-        },
-          Number(g.total_debit).toFixed(2),
-          Number(g.total_credit).toFixed(2)
-        ]);
-
-        body.push([{
-          content: 'Difference',
-          colSpan: 3,
-          styles: { fontStyle: 'bold', textColor: [180, 0, 0] }
-        }, '', Number(g.difference).toFixed(2)]);
+        body.push([{ content: 'Group Total', colSpan: 3, styles: { fontStyle: 'bold' } }, fmtExport(g.total_debit), fmtExport(g.total_credit)]);
+        body.push([{ content: 'Difference',  colSpan: 3, styles: { fontStyle: 'bold', textColor: [180,0,0] } }, '', fmtExport(g.difference)]);
       });
 
-      // Grand total
-      body.push([{
-        content: 'Grand Total',
-        colSpan: 3,
-        styles: { fontStyle: 'bold', fillColor: [50, 50, 50], textColor: [255, 255, 255] }
-      },
-        Number(report.grand.debit).toFixed(2),
-        Number(report.grand.credit).toFixed(2)
-      ]);
-
-      body.push([{
-        content: 'Difference',
-        colSpan: 3,
-        styles: { fontStyle: 'bold' }
-      }, '', Number(report.grand.difference).toFixed(2)]);
+      body.push([{ content: 'Grand Total', colSpan: 3, styles: { fontStyle: 'bold', fillColor: [50,50,50], textColor: [255,255,255] } }, fmtExport(report.grand.debit), fmtExport(report.grand.credit)]);
+      body.push([{ content: 'Difference',  colSpan: 3, styles: { fontStyle: 'bold' } }, '', fmtExport(report.grand.difference)]);
 
       doc.autoTable({
         head: [['S.No', 'Code', 'Name', 'Debit', 'Credit']],
