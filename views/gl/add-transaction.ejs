@@ -2,8 +2,8 @@
   <div class="card shadow-sm">
     <div class="card-header bg-primary text-white">
       <h5 class="mb-0">
-        <%= editData ? 'Edit ' + (voucher_type==='PV' ? 'Cash Payment Voucher' : 'Cash Receipt Voucher' ) :
-          (voucher_type==='PV' ? 'Cash Payment Voucher' : 'Cash Receipt Voucher' ) %>
+        <%= editData ? 'Edit ' + (voucher_type==='PV' ? 'Cash Payment Voucher' : 'Cash Receipt Voucher') :
+          (voucher_type==='PV' ? 'Cash Payment Voucher' : 'Cash Receipt Voucher') %>
       </h5>
     </div>
 
@@ -11,10 +11,10 @@
       <div id="alertBox"></div>
 
       <form id="transactionForm">
-        <input type="hidden" name="entry_type" value="<%= entry_type %>">
+        <input type="hidden" name="entry_type"   value="<%= entry_type %>">
         <input type="hidden" name="voucher_type" value="<%= voucher_type %>">
-        <input type="hidden" name="is_edit" value="<%= editData ? 1 : 0 %>">
-        <input type="hidden" name="date" id="date">
+        <input type="hidden" name="is_edit"      value="<%= editData ? 1 : 0 %>">
+        <input type="hidden" name="date"         id="date">
         <input type="hidden" name="cash_account" id="cash_account">
 
         <div class="row g-3">
@@ -32,15 +32,20 @@
 
           <div class="col-md-4">
             <label class="form-label">Serial No</label>
-            <input type="text" name="serial_no" class="form-control" value="<%= editData ? editData.serial_no : '' %>">
+            <input type="text" name="serial_no" class="form-control"
+              value="<%= editData ? editData.serial_no : '' %>">
           </div>
 
           <!-- PARTY ACCOUNT SEARCH -->
           <div class="col-md-6" style="position:relative;">
             <label class="form-label">Account</label>
-            <input type="text" id="accountSearch" class="form-control" placeholder="Type code or name..." autocomplete="off">
+            <input type="text" id="accountSearch" class="form-control"
+                   placeholder="Type code or name..." autocomplete="off">
             <input type="hidden" id="account_code" name="account_code" required>
-            <div id="accountDropdown" style="position:absolute; z-index:9999; background:#fff; border:1px solid #ccc; border-radius:4px; max-height:200px; overflow-y:auto; width:100%; display:none;"></div>
+            <div id="accountDropdown"
+                 style="position:absolute;z-index:9999;background:#fff;border:1px solid #ccc;
+                        border-radius:4px;max-height:200px;overflow-y:auto;width:100%;display:none;">
+            </div>
           </div>
 
           <div class="col-md-6">
@@ -50,17 +55,20 @@
 
           <div class="col-md-12">
             <label class="form-label">Narration</label>
-            <input type="text" name="description" class="form-control" value="<%= editData ? editData.description : '' %>">
+            <input type="text" name="description" class="form-control"
+              value="<%= editData ? editData.description || '' : '' %>">
           </div>
 
           <div class="col-md-6">
             <label class="form-label">Reference</label>
-            <input type="text" name="reference" class="form-control" value="<%= editData ? editData.reference : '' %>">
+            <input type="text" name="reference" class="form-control"
+              value="<%= editData ? editData.reference || '' : '' %>">
           </div>
 
           <div class="col-md-6">
             <label class="form-label">Invoice</label>
-            <input type="text" name="invoice" class="form-control" value="<%= editData ? editData.invoice : '' %>">
+            <input type="text" name="invoice" class="form-control"
+              value="<%= editData ? editData.invoice || '' : '' %>">
           </div>
 
           <div class="col-md-6">
@@ -75,11 +83,18 @@
               value="<%= editData ? editData.amount : '0.00' %>">
           </div>
 
-          <!-- CASH ACCOUNT SEARCH -->
+          <!-- CASH / BANK ACCOUNT SEARCH -->
           <div class="col-md-6" style="position:relative;">
-            <label class="form-label">Cash / Bank Account <small class="text-muted">(default: company cash)</small></label>
-            <input type="text" id="cashSearch" class="form-control" placeholder="Type code or name..." autocomplete="off">
-            <div id="cashDropdown" style="position:absolute; z-index:9999; background:#fff; border:1px solid #ccc; border-radius:4px; max-height:200px; overflow-y:auto; width:100%; display:none;"></div>
+            <label class="form-label">
+              Cash / Bank Account
+              <small class="text-muted">(default: company cash)</small>
+            </label>
+            <input type="text" id="cashSearch" class="form-control"
+                   placeholder="Type code or name..." autocomplete="off">
+            <div id="cashDropdown"
+                 style="position:absolute;z-index:9999;background:#fff;border:1px solid #ccc;
+                        border-radius:4px;max-height:200px;overflow-y:auto;width:100%;display:none;">
+            </div>
           </div>
 
           <div class="col-md-6">
@@ -106,33 +121,37 @@
 <script>
 $(document).ready(function () {
 
-  const isEdit = <%= editData ? 'true' : 'false' %>;
-  const editDate = "<%= editData ? editData.date : '' %>";
-  const editAccount = "<%= editData ? editData.account_code : '' %>";
-  const editAmount = "<%= editData ? editData.amount : '' %>";
-  const defaultCashCode = "<%= settings.cash_account_code %>";
-  const editCashCode = "<%= editData ? (editData.cash_account || '') : '' %>";
-  const voucherType = "<%= voucher_type %>";
+  // ── Server se values ──────────────────────────────────────
+  const isEdit          = <%= editData ? 'true' : 'false' %>;
+  const editDate        = "<%= editData ? editData.date         : '' %>".trim();
+  const editAccount     = "<%= editData ? editData.account_code  : '' %>".trim();
+  const editCashCode    = "<%= editData ? (editData.cash_account || '') : '' %>".trim();
+  const editAmount      = "<%= editData ? editData.amount       : '' %>".trim();
+  const defaultCashCode = "<%= settings ? settings.cash_account_code : '' %>".trim();
+  const voucherType     = "<%= voucher_type %>";
 
-  // ================= ALL ACCOUNTS LIST =================
-  const allAccounts = [
-    <% accounts.forEach((a, i) => { %>
-      { code: "<%= a.account_code %>", name: "<%- a.name.replace(/"/g, '&quot;') %>", label: "<%= a.account_code %> - <%- a.name.replace(/"/g, '&quot;') %>" }<%= i < accounts.length - 1 ? ',' : '' %>
-    <% }) %>
-  ];
+  // ── Accounts array — codes trim karke store karo ─────────
+  const allAccounts = [];
+  <% accounts.forEach(function(a) { %>
+    allAccounts.push({
+      code:  "<%= a.account_code %>".trim(),
+      name:  `<%- a.name.replace(/`/g, "'") %>`.trim(),
+      label: "<%= a.account_code %>".trim() + " - " + `<%- a.name.replace(/`/g, "'") %>`.trim()
+    });
+  <% }); %>
 
-  // ================= DATE =================
-  function formatToDB(dateObj) {
-    return dateObj.getFullYear() + "-" +
-      String(dateObj.getMonth() + 1).padStart(2, "0") + "-" +
-      String(dateObj.getDate()).padStart(2, "0");
+  // ── Date ──────────────────────────────────────────────────
+  function formatToDB(d) {
+    return d.getFullYear() + "-" +
+      String(d.getMonth() + 1).padStart(2, "0") + "-" +
+      String(d.getDate()).padStart(2, "0");
   }
 
   let initialDate;
   if (isEdit && editDate) {
-    const parts = editDate.toString().slice(0, 10).split("-");
-    initialDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    $("#date").val(parts.join("-"));
+    const parts = editDate.slice(0, 10).split("-");
+    initialDate = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+    $("#date").val(editDate.slice(0, 10));
   } else {
     initialDate = new Date();
     $("#date").val(formatToDB(initialDate));
@@ -142,135 +161,128 @@ $(document).ready(function () {
     dateFormat: "d-m-Y",
     defaultDate: initialDate,
     allowInput: true,
-    onChange: function (selectedDates) {
-      if (selectedDates.length) $("#date").val(formatToDB(selectedDates[0]));
-    }
+    onChange(sel) { if (sel.length) $("#date").val(formatToDB(sel[0])); }
   });
 
-  // ================= VOUCHER =================
+  // ── Voucher no ────────────────────────────────────────────
   if (!isEdit) {
     fetch(`/api/next-voucher?voucher_type=${voucherType}`)
       .then(r => r.json())
       .then(d => { if (d.success) $("#voucher_no").val(d.voucher_no); });
   }
 
-  // ================= BALANCE FETCH =================
-  async function fetchBalance(code, target) {
-    if (!code) return $(target).val("0.00");
+  // ── Balance fetch ─────────────────────────────────────────
+  async function fetchBalance(code, sel) {
+    if (!code) { $(sel).val("0.00"); return; }
     try {
-      const r = await fetch(`/api/account-balance/${code}`);
-      const d = await r.json();
-      $(target).val(d.balance || "0.00");
-    } catch {
-      $(target).val("0.00");
-    }
+      const d = await fetch(`/api/account-balance/${code}`).then(r => r.json());
+      $(sel).val(parseFloat(d.balance || 0).toLocaleString('en-PK', { minimumFractionDigits: 2 }));
+    } catch { $(sel).val("0.00"); }
   }
 
-  // ================= GENERIC DROPDOWN MAKER =================
-  function makeDropdown(searchEl, dropdownEl, hiddenEl, onSelect) {
-    let highlightedIndex = -1;
+  // ── Dropdown factory ──────────────────────────────────────
+  function makeDropdown(searchId, dropdownId, hiddenId, onSelect) {
+    const searchEl   = document.getElementById(searchId);
+    const dropdownEl = document.getElementById(dropdownId);
+    const hiddenEl   = document.getElementById(hiddenId);
+    let hi = -1;
 
-    function setItem(a) {
+    function pick(a) {
       searchEl.value = a.label;
-      if (hiddenEl) hiddenEl.value = a.code;
+      hiddenEl.value = a.code;
       dropdownEl.style.display = 'none';
-      highlightedIndex = -1;
+      hi = -1;
       if (onSelect) onSelect(a);
     }
 
-    function renderDropdown(search) {
+    function render(q) {
       dropdownEl.innerHTML = '';
-      highlightedIndex = -1;
-
-      const filtered = search
-        ? allAccounts.filter(a =>
-            a.code.toLowerCase().includes(search) ||
-            a.name.toLowerCase().includes(search)
-          ).slice(0, 50)
+      hi = -1;
+      const list = q
+        ? allAccounts.filter(a => a.code.includes(q) || a.name.toLowerCase().includes(q)).slice(0, 50)
         : allAccounts.slice(0, 50);
-
-      if (filtered.length === 0) {
-        dropdownEl.style.display = 'none';
-        return;
-      }
-
-      filtered.forEach((a, i) => {
-        const div = document.createElement('div');
-        div.textContent = a.label;
-        div.style.cssText = 'padding:8px 12px; cursor:pointer; border-bottom:1px solid #eee; font-size:14px;';
-        div.addEventListener('mouseenter', () => { highlightedIndex = i; updateHighlight(); });
-        div.addEventListener('mousedown', (e) => { e.preventDefault(); setItem(a); });
-        dropdownEl.appendChild(div);
+      dropdownEl._list = list;
+      if (!list.length) { dropdownEl.style.display = 'none'; return; }
+      list.forEach((a, i) => {
+        const d = document.createElement('div');
+        d.textContent = a.label;
+        d.style.cssText = 'padding:8px 12px;cursor:pointer;border-bottom:1px solid #eee;font-size:14px;';
+        d.onmouseenter = () => { hi = i; hl(); };
+        d.onmousedown  = e => { e.preventDefault(); pick(a); };
+        dropdownEl.appendChild(d);
       });
-
-      dropdownEl._filtered = filtered;
       dropdownEl.style.display = 'block';
     }
 
-    function updateHighlight() {
-      const items = dropdownEl.querySelectorAll('div');
-      items.forEach((el, i) => {
-        el.style.background = i === highlightedIndex ? '#d0e8ff' : '#fff';
+    function hl() {
+      dropdownEl.querySelectorAll('div').forEach((el, i) => {
+        el.style.background = i === hi ? '#d0e8ff' : '#fff';
       });
-      if (items[highlightedIndex]) items[highlightedIndex].scrollIntoView({ block: 'nearest' });
+      const el = dropdownEl.querySelectorAll('div')[hi];
+      if (el) el.scrollIntoView({ block: 'nearest' });
     }
 
-    searchEl.addEventListener('input', function() {
-      if (hiddenEl) hiddenEl.value = '';
-      renderDropdown(this.value.toLowerCase());
+    searchEl.addEventListener('input', function () {
+      hiddenEl.value = '';
+      render(this.value.toLowerCase().trim());
     });
-
-    searchEl.addEventListener('keydown', function(e) {
-      const items = dropdownEl._filtered || [];
-      if (!items.length) return;
-      if (e.key === 'ArrowDown') { e.preventDefault(); highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1); updateHighlight(); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); highlightedIndex = Math.max(highlightedIndex - 1, 0); updateHighlight(); }
-      else if (e.key === 'Enter') { e.preventDefault(); if (highlightedIndex >= 0 && items[highlightedIndex]) setItem(items[highlightedIndex]); }
-      else if (e.key === 'Escape') { dropdownEl.style.display = 'none'; }
+    searchEl.addEventListener('keydown', function (e) {
+      const list = dropdownEl._list || [];
+      if (e.key === 'ArrowDown')  { e.preventDefault(); hi = Math.min(hi+1, list.length-1); hl(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); hi = Math.max(hi-1, 0); hl(); }
+      else if (e.key === 'Enter')   { e.preventDefault(); if (hi >= 0 && list[hi]) pick(list[hi]); }
+      else if (e.key === 'Escape')  { dropdownEl.style.display = 'none'; }
     });
+    searchEl.addEventListener('blur',  ()  => setTimeout(() => dropdownEl.style.display = 'none', 200));
+    searchEl.addEventListener('focus', function () { render(this.value.toLowerCase().trim()); });
 
-    searchEl.addEventListener('blur', () => { setTimeout(() => dropdownEl.style.display = 'none', 200); });
-    searchEl.addEventListener('focus', function() { renderDropdown(this.value.toLowerCase()); });
+    // ── setByCode: trim karke match karo ──────────────────
+    function setByCode(code) {
+  const c = String(code).trim();
+  const found = allAccounts.find(a => a.code === c);
+  if (found) {
+    searchEl.value = found.label;
+    hiddenEl.value = found.code;
+    if (onSelect) onSelect(found);  // ← yeh line add karo
+  } else {
+    searchEl.value = c;
+    hiddenEl.value = c;
+  }
+}
 
-    return { setByCode: (code) => {
-      const found = allAccounts.find(a => a.code === String(code));
-      if (found) setItem(found);
-    }};
+    return { setByCode, pick };
   }
 
-  // ================= PARTY ACCOUNT DROPDOWN =================
-  const partyDropdown = makeDropdown(
-    document.getElementById('accountSearch'),
-    document.getElementById('accountDropdown'),
-    document.getElementById('account_code'),
-    (a) => fetchBalance(a.code, "#accountBalance")
+  // ── Dropdowns banao ───────────────────────────────────────
+  const partyDD = makeDropdown(
+    'accountSearch', 'accountDropdown', 'account_code',
+    a => fetchBalance(a.code, '#accountBalance')
   );
 
-  if (isEdit && editAccount) {
-    partyDropdown.setByCode(editAccount);
-    fetchBalance(editAccount, "#accountBalance");
-  }
+  const cashDD = makeDropdown(
+    'cashSearch', 'cashDropdown', 'cash_account',
+    a => fetchBalance(a.code, '#cashInHand')
+  );
 
-  // ================= CASH ACCOUNT DROPDOWN =================
-  const cashDropdown = makeDropdown(
-    document.getElementById('cashSearch'),
-    document.getElementById('cashDropdown'),
-    null, // hidden input alag handle karenge
-    (a) => {
-      $("#cash_account").val(a.code);
-      fetchBalance(a.code, "#cashInHand");
+  // ── PRE-FILL — yahi asli fix hai ─────────────────────────
+  if (isEdit) {
+    if (editAccount) {
+      partyDD.setByCode(editAccount);
+      fetchBalance(editAccount, '#accountBalance');
     }
-  );
-
-  // Default cash set karo
-  const initialCash = (isEdit && editCashCode) ? editCashCode : defaultCashCode;
-  if (initialCash) {
-    cashDropdown.setByCode(initialCash);
-    $("#cash_account").val(initialCash);
-    fetchBalance(initialCash, "#cashInHand");
+    const cashToSet = editCashCode || defaultCashCode;
+    if (cashToSet) {
+      cashDD.setByCode(cashToSet);
+      fetchBalance(cashToSet, '#cashInHand');
+    }
+  } else {
+    if (defaultCashCode) {
+      cashDD.setByCode(defaultCashCode);
+      fetchBalance(defaultCashCode, '#cashInHand');
+    }
   }
 
-  // ================= AMOUNT =================
+  // ── Amount ────────────────────────────────────────────────
   if (isEdit && editAmount) {
     const amt = parseFloat(editAmount);
     if (!isNaN(amt)) {
@@ -278,41 +290,42 @@ $(document).ready(function () {
       $("#batch_total").val(amt.toFixed(2));
     }
   }
-
   $("input[name='amount']").on("input", function () {
-    const val = parseFloat(this.value) || 0;
-    $("#batch_total").val(val.toFixed(2));
+    $("#batch_total").val((parseFloat(this.value) || 0).toFixed(2));
   });
 
-  // ================= SAVE =================
+  // ── Save ──────────────────────────────────────────────────
   $("#saveBtn").click(async function () {
-    const form = document.getElementById("transactionForm");
-    const data = Object.fromEntries(new FormData(form));
+    const data = Object.fromEntries(new FormData(document.getElementById('transactionForm')));
 
-    if (!data.account_code) {
+    // ── Debug: console mein check karo ke values aa rahi hain
+    console.log("account_code:", data.account_code);
+    console.log("cash_account:", data.cash_account);
+
+    if (!data.account_code || !data.account_code.trim()) {
       $("#alertBox").html('<div class="alert alert-danger">Please select an account!</div>');
       return;
     }
-
-    if (!data.cash_account) {
+    if (!data.cash_account || !data.cash_account.trim()) {
       data.cash_account = defaultCashCode;
     }
 
-    const res = await fetch("/gl/add-transaction", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data)
-    });
-
-    const r = await res.json();
-    $("#alertBox").html(`<div class="alert alert-${r.success ? 'success' : 'danger'}">${r.message}</div>`);
-
-    if (r.success) {
-      setTimeout(() => {
-        window.location.href = `/search?query=${data.voucher_no}&message=Updated`;
-      }, 2000);
+    try {
+      const res = await fetch("/gl/add-transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+      const r = await res.json();
+      $("#alertBox").html(`<div class="alert alert-${r.success ? 'success' : 'danger'}">${r.message}</div>`);
+      if (r.success) {
+        setTimeout(() => { window.location.href = `/search?query=${data.voucher_no}&message=Updated`; }, 1500);
+      }
+    } catch {
+      $("#alertBox").html('<div class="alert alert-danger">Network error. Try again.</div>');
     }
   });
 
 });
 </script>
+

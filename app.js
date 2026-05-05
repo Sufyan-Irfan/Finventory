@@ -551,7 +551,6 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
   }
 });
 
-
 app.get('/gl/groups', isAuthenticated, async (req, res) => {
   const companyCode = req.session.user.company_code;
 
@@ -747,6 +746,7 @@ app.get('/gl/chart', isAuthenticated, async (req, res) => {
 });
 
 //===========Add Transaction=============
+
 app.get('/gl/add-transaction', isAuthenticated, async (req, res) => {
   const { type, voucher_no } = req.query;
   const companyCode = req.session.user.company_code;
@@ -782,23 +782,21 @@ app.get('/gl/add-transaction', isAuthenticated, async (req, res) => {
 
     const cashAccount = settings?.cash_account_code;
 
-    // 🔥 Party row = cash account ke ilawa
+    // Party row = cash account ke ilawa
     let partyRow = rows.find(r => r.account_code !== cashAccount);
-
-    // Fallback — agar imported data mein cash account alag tha
     if (!partyRow) partyRow = rows[0];
 
-    // 🔥 Cash row = party ke ilawa
+    // Cash row = party ke ilawa
     const cashRow = rows.find(r => r.account_code !== partyRow.account_code);
 
-    // 🔥 Amount — party row se
+    // Amount — party row se
     const amount = Number(partyRow.debit) > 0
       ? Number(partyRow.debit)
       : Number(partyRow.credit) > 0
         ? Number(partyRow.credit)
         : 0;
 
-    // 🔥 Date — timezone fix
+    // Date — timezone fix
     const rawDate = partyRow.date;
     let dateStr;
     if (rawDate instanceof Date) {
@@ -810,15 +808,33 @@ app.get('/gl/add-transaction', isAuthenticated, async (req, res) => {
       dateStr = String(rawDate).slice(0, 10);
     }
 
+    // ✅ FIX: account names fetch karo taake search box mein show hon
+    const partyCode  = partyRow.account_code;
+    const cashCode   = cashRow?.account_code || cashAccount;
+
+    const [[partyAcc]] = await db.query(
+      "SELECT name FROM accounts WHERE account_code=? AND company_code=?",
+      [partyCode, companyCode]
+    );
+    const [[cashAcc]] = await db.query(
+      "SELECT name FROM accounts WHERE account_code=? AND company_code=?",
+      [cashCode, companyCode]
+    );
+
     editData = {
       voucher_no,
       date: dateStr,
       serial_no: partyRow.serial_no,
-      account_code: partyRow.account_code,
-      cash_account: cashRow?.account_code || cashAccount,
+      // party
+      account_code:      partyCode,
+      account_name:      partyAcc?.name || partyCode,   // ✅ NEW
+      // cash
+      cash_account:      cashCode,
+      cash_account_name: cashAcc?.name  || cashCode,    // ✅ NEW
+      // rest
       description: partyRow.description,
-      reference: partyRow.reference,
-      invoice: partyRow.invoice,
+      reference:   partyRow.reference,
+      invoice:     partyRow.invoice,
       amount
     };
   }
@@ -1537,14 +1553,14 @@ app.get('/search', isAuthenticated, async (req, res) => {
   const [rows] = await db.query(`
     SELECT
       t.voucher_no,
-      DATE_FORMAT(t.date,'%d-%m-%Y') AS date,
-      t.voucher_type,
-      t.account_code,
-      a.name AS account_name,
-      t.description,
-      t.reference,
-      t.debit,
-      t.credit
+      DATE_FORMAT(MIN(t.date),'%d-%m-%Y') AS date,
+      MAX(t.voucher_type) AS voucher_type,
+      MIN(t.account_code) AS account_code,
+      MIN(a.name) AS account_name,
+      MIN(t.description) AS description,
+      MIN(t.reference) AS reference,
+      SUM(CASE WHEN t.debit > 0 THEN t.debit ELSE 0 END) AS debit,
+      SUM(CASE WHEN t.credit > 0 THEN t.credit ELSE 0 END) AS credit
     FROM transactions t
     JOIN accounts a
       ON a.account_code = t.account_code
@@ -1558,7 +1574,7 @@ app.get('/search', isAuthenticated, async (req, res) => {
         OR t.reference LIKE ?
       )
     GROUP BY t.voucher_no
-    ORDER BY MAX(t.date) DESC, t.voucher_no DESC
+    ORDER BY MIN(t.date) DESC, t.voucher_no DESC
     LIMIT 100
   `, [
     company_code,
@@ -1575,7 +1591,6 @@ app.get('/search', isAuthenticated, async (req, res) => {
     query
   });
 });
-
 
 app.post('/gl/delete-voucher/:voucher_no', isAuthenticated, async (req, res) => {
   const { voucher_no } = req.params;
