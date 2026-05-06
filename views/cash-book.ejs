@@ -35,14 +35,17 @@
   </div>
 
 <script>
-  const startPicker = flatpickr("#start_date", { dateFormat: "d-m-Y", allowInput:true });
-  const endPicker   = flatpickr("#end_date",   { dateFormat: "d-m-Y", allowInput:true });
+  const startInput = flatpickr("#start_date", {
+    dateFormat: "d-m-Y",
+    allowInput: true
+  });
+  const endInput = flatpickr("#end_date", {
+    dateFormat: "d-m-Y",
+    allowInput: true
+  });
 
-  // defaults: start = 1st of current month, end = today
-  const now = new Date();
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  startPicker.setDate(firstOfMonth);
-  endPicker.setDate(now);
+  startInput.setDate(new Date(2000, 0, 1));   // 01-01-2000
+  endInput.setDate(new Date(9999, 11, 31));   // 31-12-9999
 </script>
 </body>
 </html>
