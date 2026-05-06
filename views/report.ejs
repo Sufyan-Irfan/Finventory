@@ -52,7 +52,7 @@
   <script>
     // ================= DATES =================
     const startInput = flatpickr("#start_date", { dateFormat: "d-m-Y", allowInput: true });
-    const endInput   = flatpickr("#end_date",   { dateFormat: "d-m-Y", allowInput: true });
+    const endInput     = flatpickr("#end_date",   { dateFormat: "d-m-Y", allowInput: true });
     const now = new Date();
     startInput.setDate(new Date(2000, 0, 1));   // 01-01-2000
     endInput.setDate(new Date(9999, 11, 31));
@@ -162,8 +162,9 @@
     });
 
     searchInput.addEventListener('focus', function() {
-      renderDropdown(this.value.toLowerCase());
-    });
+  this.select(); // 👈 yeh add kiya - focus pe poora text select ho jayega
+  renderDropdown(this.value.toLowerCase());
+});
 
     // Form submit pe validate karo
     document.querySelector('form').addEventListener('submit', function(e) {

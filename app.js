@@ -1260,6 +1260,7 @@ app.post('/report-result', isAuthenticated, async (req, res) => {
     DATE_FORMAT(date,'%d-%m-%Y') AS formatted_date,
     voucher_no,
     description,
+    reference,
     debit,
     credit
   FROM transactions
