@@ -25,12 +25,21 @@
       </div>
 
       <!-- ACCOUNT SEARCH -->
-      <div class="col-md-12" style="position:relative;">
-        <label>Account:</label>
-        <input type="text" id="accountSearch" class="form-control" placeholder="Type code or name..." autocomplete="off">
-        <input type="hidden" id="account" name="account" required>
-        <div id="accountDropdown" style="position:absolute; z-index:9999; background:#fff; border:1px solid #ccc; border-radius:4px; max-height:220px; overflow-y:auto; width:100%; display:none;"></div>
-      </div>
+      <!-- FROM ACCOUNT -->
+<div class="col-md-6" style="position:relative;">
+  <label>From Account: <span class="text-danger">*</span></label>
+  <input type="text" id="fromSearch" class="form-control" placeholder="Type code or name..." autocomplete="off">
+  <input type="hidden" id="from_account" name="from_account" required>
+  <div id="fromDropdown" style="position:absolute; z-index:9999; background:#fff; border:1px solid #ccc; border-radius:4px; max-height:220px; overflow-y:auto; width:100%; display:none;"></div>
+</div>
+
+<!-- TO ACCOUNT -->
+<div class="col-md-6" style="position:relative;">
+  <label>To Account:</label>
+  <input type="text" id="toSearch" class="form-control" placeholder="Type code or name..." autocomplete="off">
+  <input type="hidden" id="to_account" name="to_account">
+  <div id="toDropdown" style="position:absolute; z-index:9999; background:#fff; border:1px solid #ccc; border-radius:4px; max-height:220px; overflow-y:auto; width:100%; display:none;"></div>
+</div>
 
       <div class="col-md-3">
         <label class="form-label">Entry Type</label>
@@ -50,132 +59,114 @@
   </div>
 
   <script>
-    // ================= DATES =================
-    const startInput = flatpickr("#start_date", { dateFormat: "d-m-Y", allowInput: true });
-    const endInput     = flatpickr("#end_date",   { dateFormat: "d-m-Y", allowInput: true });
-    const now = new Date();
-    startInput.setDate(new Date(2000, 0, 1));   // 01-01-2000
-    endInput.setDate(new Date(9999, 11, 31));
+  // ================= DATES =================
+  const startInput = flatpickr("#start_date", { dateFormat: "d-m-Y", allowInput: true });
+  const endInput   = flatpickr("#end_date",   { dateFormat: "d-m-Y", allowInput: true });
+  startInput.setDate(new Date(2000, 0, 1));
+  endInput.setDate(new Date(9999, 11, 31));
 
-    // ================= ACCOUNT SEARCH =================
-    const allAccounts = [
-      <% accounts.forEach((a, i) => { %>
-        { code: "<%= a.account_code %>", name: "<%- a.name.replace(/"/g, '&quot;') %>", label: "<%= a.account_code %> - <%- a.name.replace(/"/g, '&quot;') %>" }<%= i < accounts.length - 1 ? ',' : '' %>
-      <% }) %>
-    ];
+  // ================= ACCOUNTS DATA =================
+  const allAccounts = [
+    <% accounts.forEach((a, i) => { %>
+      { code: "<%= a.account_code %>", name: "<%- a.name.replace(/"/g, '&quot;') %>", label: "<%= a.account_code %> - <%- a.name.replace(/"/g, '&quot;') %>" }<%= i < accounts.length - 1 ? ',' : '' %>
+    <% }) %>
+  ];
 
-    const searchInput  = document.getElementById('accountSearch');
-    const dropdown     = document.getElementById('accountDropdown');
-    const hiddenInput  = document.getElementById('account');
-    let highlightedIndex = -1;
-
-    // "All Accounts" option hamesha pehle
-    const allOption = { code: 'ALL', name: 'All Accounts', label: 'ALL - All Accounts' };
-
-    // Default ALL selected
-    searchInput.value = allOption.label;
-    hiddenInput.value = allOption.code;
+  // ================= GENERIC SEARCH BUILDER =================
+  function buildSearch({ inputId, dropdownId, hiddenId, required, onSelect }) {
+    const searchEl  = document.getElementById(inputId);
+    const dropEl    = document.getElementById(dropdownId);
+    const hiddenEl  = document.getElementById(hiddenId);
+    let highlighted = -1;
 
     function setAccount(a) {
-      searchInput.value = a.label;
-      hiddenInput.value = a.code;
-      dropdown.style.display = 'none';
-      highlightedIndex = -1;
+      searchEl.value  = a ? a.label : '';
+      hiddenEl.value  = a ? a.code  : '';
+      dropEl.style.display = 'none';
+      highlighted = -1;
+      if (onSelect) onSelect(a);
     }
 
     function renderDropdown(search) {
-      dropdown.innerHTML = '';
-      highlightedIndex = -1;
-
-      const list = [allOption, ...allAccounts];
+      dropEl.innerHTML = '';
+      highlighted = -1;
 
       const filtered = search
-        ? list.filter(a =>
+        ? allAccounts.filter(a =>
             a.code.toLowerCase().includes(search) ||
             a.name.toLowerCase().includes(search)
           ).slice(0, 50)
-        : list.slice(0, 50);
+        : allAccounts.slice(0, 50);
 
-      if (filtered.length === 0) {
-        dropdown.style.display = 'none';
-        return;
-      }
+      if (!filtered.length) { dropEl.style.display = 'none'; return; }
 
       filtered.forEach((a, i) => {
         const div = document.createElement('div');
         div.textContent = a.label;
         div.style.cssText = 'padding:8px 12px; cursor:pointer; border-bottom:1px solid #eee; font-size:14px;';
-        div.addEventListener('mouseenter', () => {
-          highlightedIndex = i;
-          updateHighlight();
-        });
-        div.addEventListener('mousedown', (e) => {
-          e.preventDefault();
-          setAccount(a);
-        });
-        dropdown.appendChild(div);
+        div.addEventListener('mouseenter', () => { highlighted = i; updateHL(); });
+        div.addEventListener('mousedown', e => { e.preventDefault(); setAccount(a); });
+        dropEl.appendChild(div);
       });
 
-      dropdown._filtered = filtered;
-      dropdown.style.display = 'block';
+      dropEl._filtered = filtered;
+      dropEl.style.display = 'block';
     }
 
-    function updateHighlight() {
-      const items = dropdown.querySelectorAll('div');
-      items.forEach((el, i) => {
-        el.style.background = i === highlightedIndex ? '#d0e8ff' : '#fff';
-      });
-      if (items[highlightedIndex]) {
-        items[highlightedIndex].scrollIntoView({ block: 'nearest' });
-      }
+    function updateHL() {
+      const items = dropEl.querySelectorAll('div');
+      items.forEach((el, i) => el.style.background = i === highlighted ? '#d0e8ff' : '#fff');
+      if (items[highlighted]) items[highlighted].scrollIntoView({ block: 'nearest' });
     }
 
-    searchInput.addEventListener('input', function() {
-      hiddenInput.value = '';
+    searchEl.addEventListener('input', function() {
+      hiddenEl.value = '';
       renderDropdown(this.value.toLowerCase());
     });
 
-    searchInput.addEventListener('keydown', function(e) {
-      const items = dropdown._filtered || [];
+    searchEl.addEventListener('keydown', function(e) {
+      const items = dropEl._filtered || [];
       if (!items.length) return;
-
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
-        updateHighlight();
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        highlightedIndex = Math.max(highlightedIndex - 1, 0);
-        updateHighlight();
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        if (highlightedIndex >= 0 && items[highlightedIndex]) {
-          setAccount(items[highlightedIndex]);
-        }
-      } else if (e.key === 'Escape') {
-        dropdown.style.display = 'none';
-      }
+      if (e.key === 'ArrowDown') { e.preventDefault(); highlighted = Math.min(highlighted+1, items.length-1); updateHL(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); highlighted = Math.max(highlighted-1, 0); updateHL(); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (highlighted >= 0) setAccount(items[highlighted]); }
+      else if (e.key === 'Escape') dropEl.style.display = 'none';
     });
 
-    searchInput.addEventListener('blur', () => {
-      setTimeout(() => dropdown.style.display = 'none', 200);
-    });
+    searchEl.addEventListener('blur', () => setTimeout(() => dropEl.style.display = 'none', 200));
+    searchEl.addEventListener('focus', function() { this.select(); renderDropdown(this.value.toLowerCase()); });
 
-    searchInput.addEventListener('focus', function() {
-  this.select(); // 👈 yeh add kiya - focus pe poora text select ho jayega
-  renderDropdown(this.value.toLowerCase());
-});
+    return { setAccount };
+  }
 
-    // Form submit pe validate karo
-    document.querySelector('form').addEventListener('submit', function(e) {
-      if (!hiddenInput.value) {
-        e.preventDefault();
-        searchInput.focus();
-        searchInput.style.borderColor = 'red';
-        alert('Please select an account!');
-      }
-    });
-  </script>
+  // ================= FROM SEARCH =================
+  const fromSearch = buildSearch({
+    inputId: 'fromSearch', dropdownId: 'fromDropdown', hiddenId: 'from_account',
+    required: true,
+    onSelect: (a) => {
+      // From select hote hi To mein auto-fill
+      if (a) toSearch.setAccount(a);
+    }
+  });
+
+  // ================= TO SEARCH =================
+  const toSearch = buildSearch({
+    inputId: 'toSearch', dropdownId: 'toDropdown', hiddenId: 'to_account',
+    required: false
+  });
+
+  // ================= FORM VALIDATION =================
+  document.querySelector('form').addEventListener('submit', function(e) {
+    const fromVal = document.getElementById('from_account').value;
+    if (!fromVal) {
+      e.preventDefault();
+      document.getElementById('fromSearch').focus();
+      document.getElementById('fromSearch').style.borderColor = 'red';
+      alert('Please select From Account!');
+    }
+  });
+</script>
+
 </body>
 
 </html>

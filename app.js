@@ -1152,18 +1152,15 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
   }
 });
 
-// ==================== REPORT FILTER PAGE ====================
 app.get('/report', isAuthenticated, async (req, res) => {
   const companyCode = req.session.user.company_code;
-
   try {
-    // Accounts
     const [accounts] = await db.query(
-      'SELECT account_code, name FROM accounts WHERE company_code = ?', [companyCode]
+      'SELECT account_code, name FROM accounts WHERE company_code = ? ORDER BY account_code',
+      [companyCode]
     );
-    accounts.unshift({ account_code: 'ALL', name: 'All Accounts' });
+    // ❌ accounts.unshift({ account_code: 'ALL', name: 'All Accounts' }); // hata do
 
-    // Unique entry_type values
     const [entryTypes] = await db.query(
       'SELECT DISTINCT entry_type FROM transactions WHERE company_code = ? AND entry_type IS NOT NULL',
       [companyCode]
@@ -1178,119 +1175,82 @@ app.get('/report', isAuthenticated, async (req, res) => {
 
 // ==================== REPORT RESULT ====================
 app.post('/report-result', isAuthenticated, async (req, res) => {
-  let { start_date, end_date, account, entry_type } = req.body;
+  let { start_date, end_date, from_account, to_account } = req.body;
   const companyCode = req.session.user.company_code;
 
+  // To blank ho to From hi use karo
+  if (!to_account) to_account = from_account;
+
+  const parseDMY = d => {
+    const [dd, mm, yy] = d.split('-');
+    return `${yy}-${mm}-${dd}`;
+  };
+
+  const formattedStart = parseDMY(start_date);
+  const formattedEnd   = parseDMY(end_date);
+
   try {
+    // From - To range ke accounts
+    const [accountsList] = await db.query(
+      `SELECT account_code, name, opening_balance
+       FROM accounts
+       WHERE company_code = ?
+       AND account_code >= ? AND account_code <= ?
+       ORDER BY account_code`,
+      [companyCode, from_account, to_account]
+    );
 
-    const parseDMY = d => {
-      const [dd, mm, yy] = d.split('-');
-      return `${yy}-${mm}-${dd}`;
-    };
+    if (!accountsList.length)
+      return res.status(404).send('No accounts found in this range');
 
-    const formattedStart = parseDMY(start_date);
-    const formattedEnd = parseDMY(end_date);
+    // Har account ka data
+    const results = [];
 
-    let whereClause = `
-      company_code = ?
-      AND DATE(date) BETWEEN ? AND ?
-    `;
-    let params = [companyCode, formattedStart, formattedEnd];
-
-    let party = null;
-    let opening_balance = 0;
-
-    // ================= SINGLE ACCOUNT =================
-    if (account && account !== 'ALL') {
-
-      whereClause += ` AND account_code = ?`;
-      params.push(account);
-
-      const [[acc]] = await db.query(
-        `SELECT name, opening_balance
-         FROM accounts
-         WHERE account_code = ? AND company_code = ?`,
-        [account, companyCode]
-      );
-
-      if (!acc) return res.status(404).send('Account not found');
-
-      // Opening balance
+    for (const acc of accountsList) {
+      // Opening balance before start_date
       const [[prev]] = await db.query(
         `SELECT
            COALESCE(SUM(debit),0)  AS debit,
            COALESCE(SUM(credit),0) AS credit
          FROM transactions
-         WHERE company_code = ?
-         AND DATE(date) < ?
-         AND account_code = ?`,
-        [companyCode, formattedStart, account]
+         WHERE company_code = ? AND DATE(date) < ? AND account_code = ?`,
+        [companyCode, formattedStart, acc.account_code]
       );
 
-      opening_balance =
+      const opening_balance =
         Number(acc.opening_balance || 0) +
-        Number(prev.debit || 0) -
+        Number(prev.debit  || 0) -
         Number(prev.credit || 0);
 
-      party = { name: acc.name, opening_balance };
-
-    } else {
-
-      // ================= ALL ACCOUNTS =================
-      const [[prev]] = await db.query(
+      // Transactions
+      const [transactions] = await db.query(
         `SELECT
-           COALESCE(SUM(debit),0)  AS debit,
-           COALESCE(SUM(credit),0) AS credit
+           DATE_FORMAT(date,'%d-%m-%Y') AS formatted_date,
+           voucher_no, description, reference, debit, credit
          FROM transactions
          WHERE company_code = ?
-         AND DATE(date) < ?`,
-        [companyCode, formattedStart]
+         AND DATE(date) BETWEEN ? AND ?
+         AND account_code = ?
+         ORDER BY date, id`,
+        [companyCode, formattedStart, formattedEnd, acc.account_code]
       );
 
-      opening_balance =
-        Number(prev.debit || 0) -
-        Number(prev.credit || 0);
-
-      party = { name: 'All Accounts', opening_balance };
+      results.push({
+        account_code: acc.account_code,
+        name: acc.name,
+        opening_balance,
+        transactions
+      });
     }
 
-    // ================= ENTRY TYPE =================
-    let transactionsQuery = `
-  SELECT
-    DATE_FORMAT(date,'%d-%m-%Y') AS formatted_date,
-    voucher_no,
-    description,
-    reference,
-    debit,
-    credit
-  FROM transactions
-  WHERE ${whereClause}
-`;
-
-    // 🔥 FIX FOR ALL ACCOUNTS (remove cash entries)
-    if (!account || account === 'ALL') {
-      transactionsQuery += `
-    AND account_code != (
-      SELECT cash_account_code 
-      FROM company_settings 
-      WHERE company_code = ?
-    )
-  `;
-      params.push(companyCode);
-    }
-
-    transactionsQuery += ` ORDER BY date, id`;
-
-    const [transactions] = await db.query(transactionsQuery, params);
-
-   res.render('report-result', {
-  transactions,
-  party,
-  start_date,
-  end_date,
-  account_code: account,
-  fmt
-}); 
+    res.render('report-result', {
+      results,
+      from_account,
+      to_account,
+      start_date,
+      end_date,
+      fmt
+    });
 
   } catch (err) {
     console.error('REPORT ERROR:', err);
