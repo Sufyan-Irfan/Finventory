@@ -576,28 +576,31 @@ app.post('/gl/add-group', isAuthenticated, async (req, res) => {
   const { group_code, name } = req.body;
   const companyCode = req.session.user.company_code;
 
-  if (!/^\d{4}$/.test(group_code)) {
-    req.flash('error', 'Group code must be 4 digits');
-    return res.redirect('/gl/groups'); // ✅ FIX
+  // 3 ya 4 digit allow karo, leading zeros se 4 digit banao
+  if (!/^\d{3,4}$/.test(group_code)) {
+    req.flash('error', 'Group code must be 3 or 4 digits');
+    return res.redirect('/gl/groups');
   }
+
+  const paddedGroupCode = group_code.padStart(4, '0'); // 👈 3 digit ho to 0 aage
 
   const [[exists]] = await db.query(
     "SELECT id FROM `groups` WHERE group_code=? AND company_code=?",
-    [group_code, companyCode]
+    [paddedGroupCode, companyCode]
   );
 
   if (exists) {
     req.flash('error', 'Group already exists');
-    return res.redirect('/gl/groups'); // ✅ FIX
+    return res.redirect('/gl/groups');
   }
 
   await db.query(
     "INSERT INTO `groups` (group_code, name, company_code) VALUES (?, ?, ?)",
-    [group_code, name, companyCode]
+    [paddedGroupCode, name, companyCode]
   );
 
   req.flash('success', 'Group added');
-  res.redirect('/gl/groups'); // already correct
+  res.redirect('/gl/groups');
 });
 
 app.post('/gl/update-group/:id', isAuthenticated, async (req, res) => {
@@ -663,9 +666,10 @@ app.post('/gl/add-account', isAuthenticated, async (req, res) => {
   const { name, group_id, manual_code, opening_balance } = req.body;
   const companyCode = req.session.user.company_code;
 
-  if (!/^\d{1,5}$/.test(manual_code)) {
-    req.flash('error', 'Invalid account code');
-    return res.redirect('/gl/add-account');
+  // Minimum 2 digits, sirf numbers
+  if (!/^\d{2,}$/.test(manual_code)) {
+    req.flash('error', 'Account code minimum 2 digits hona chahiye');
+    return res.redirect('/gl/accounts');
   }
 
   const [[group]] = await db.query(
@@ -673,8 +677,13 @@ app.post('/gl/add-account', isAuthenticated, async (req, res) => {
     [group_id, companyCode]
   );
 
-  const suffix = manual_code.padStart(5, '0');
-  const account_code = group.group_code + suffix;
+  if (!group) {
+    req.flash('error', 'Group not found');
+    return res.redirect('/gl/accounts');
+  }
+
+  // ✅ Direct merge — koi padding nahi, jaise import mein tha
+  const account_code = group.group_code + manual_code;
 
   const [[exists]] = await db.query(
     "SELECT id FROM accounts WHERE account_code=? AND company_code=?",
@@ -682,23 +691,16 @@ app.post('/gl/add-account', isAuthenticated, async (req, res) => {
   );
 
   if (exists) {
-    req.flash('error', 'Account exists');
-    return res.redirect('/gl/add-account');
+    req.flash('error', `Account ${account_code} already exists`);
+    return res.redirect('/gl/accounts');
   }
 
   await db.query(`
-    INSERT INTO accounts
-    (account_code, name, group_id, opening_balance, company_code)
+    INSERT INTO accounts (account_code, name, group_id, opening_balance, company_code)
     VALUES (?, ?, ?, ?, ?)
-  `, [
-    account_code,
-    name,
-    group_id,
-    opening_balance || 0,
-    companyCode
-  ]);
+  `, [account_code, name, group_id, opening_balance || 0, companyCode]);
 
-  req.flash('success', 'Account added');
+  req.flash('success', `Account ${account_code} added`);
   res.redirect('/gl/accounts');
 });
 
