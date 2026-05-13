@@ -61,10 +61,14 @@
   <% } %>
 
   <script>
+  // YYYY-MM-DD ko tod ke Date object banao
+  const parts = "<%= selectedDate %>".split('-');
+  const parsedDate = new Date(parts[0], parts[1] - 1, parts[2]);
+
   const picker = flatpickr("#dateInput", {
     dateFormat: "d-m-Y",
     allowInput: true,
-    defaultDate: new Date(),   // 👈 today by default
+    defaultDate: parsedDate,  // 👈 string nahi, Date object
     onChange: function(selectedDates) {
       if (!selectedDates[0]) return;
       const d    = selectedDates[0];
