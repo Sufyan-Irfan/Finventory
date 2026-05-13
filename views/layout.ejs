@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <title>FINVENTORY</title>
   <meta charset="UTF-8">
@@ -95,129 +96,132 @@
 
     /* --- Calculator Modal --- */
     .calculator-popup {
-    position: absolute;
-    top: 65px;
-    left: 200px;
-    background: #fff;
-    border: 1px solid #ddd;
-    display: none;
-    z-index: 1100;
-    width: 250px;
-  }
+      position: absolute;
+      top: 65px;
+      left: 200px;
+      background: #fff;
+      border: 1px solid #ddd;
+      display: none;
+      z-index: 1100;
+      width: 250px;
+    }
 
-  .calculator-display {
-    width: 100%;
-    height: 50px;
-    text-align: right;
-    padding: 8px;
-    font-size: 1.3rem;
-    border: none;
-    background: #f8f9fa;
-    border-radius: 4px;
-  }
+    .calculator-display {
+      width: 100%;
+      height: 50px;
+      text-align: right;
+      padding: 8px;
+      font-size: 1.3rem;
+      border: none;
+      background: #f8f9fa;
+      border-radius: 4px;
+    }
 
-  .calc-container {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
-  }
+    .calc-container {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
 
-  .calc-btn {
-    height: 45px;
-    font-size: 1rem;
-    border: none;
-    border-radius: 5px;
-    background: #e9ecef;
-    transition: 0.2s;
-  }
+    .calc-btn {
+      height: 45px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 5px;
+      background: #e9ecef;
+      transition: 0.2s;
+    }
 
-  .calc-btn:hover {
-    background: #d6d8db;
-  }
+    .calc-btn:hover {
+      background: #d6d8db;
+    }
 
-  .calc-btn.operator {
-    background: #dee2e6;
-  }
+    .calc-btn.operator {
+      background: #dee2e6;
+    }
 
-  .calc-btn.operator:hover {
-    background: #ced4da;
-  }
+    .calc-btn.operator:hover {
+      background: #ced4da;
+    }
 
-  .calc-btn.equal {
-    background: #0d6efd;
-    color: white;
-  }
+    .calc-btn.equal {
+      background: #0d6efd;
+      color: white;
+    }
 
-  .calc-btn.equal:hover {
-    background: #0b5ed7;
-  }
+    .calc-btn.equal:hover {
+      background: #0b5ed7;
+    }
   </style>
 </head>
 
 <body>
   <!-- 📘 Sidebar -->
-<div class="sidebar">
-  <h5 class="text-white text-center mb-4">💼 FINVENTORY</h5>
+  <div class="sidebar">
+    <h5 class="text-white text-center mb-4">💼 FINVENTORY</h5>
 
-  <a href="/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a>
-  <!-- Accounts Setting Dropdown -->
- <div class="dropdown">
-  <a href="#" class="dropdown-toggle text-white px-3 py-2 d-flex justify-content-between align-items-center" data-bs-toggle="dropdown">
-    <span><i class="bi bi-person-plus"></i> Account Settings</span>
-  </a>
-
-  <ul class="dropdown-menu dropdown-menu-dark border-0 shadow w-100 ms-3">
-    
-    <li>
-      <a class="dropdown-item" href="/gl/groups">
-        Manage Groups
+    <a href="/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a>
+    <!-- Accounts Setting Dropdown -->
+    <div class="dropdown">
+      <a href="#" class="dropdown-toggle text-white px-3 py-2 d-flex justify-content-between align-items-center"
+        data-bs-toggle="dropdown">
+        <span><i class="bi bi-person-plus"></i> Account Settings</span>
       </a>
-    </li>
 
-    <li>
-      <a class="dropdown-item" href="/gl/accounts">
-        Manage Accounts
+      <ul class="dropdown-menu dropdown-menu-dark border-0 shadow w-100 ms-3">
+
+        <li>
+          <a class="dropdown-item" href="/gl/groups">
+            Manage Groups
+          </a>
+        </li>
+
+        <li>
+          <a class="dropdown-item" href="/gl/accounts">
+            Manage Accounts
+          </a>
+        </li>
+
+        <li>
+          <a class="dropdown-item" href="/gl/chart">
+            Chart Of Accounts
+          </a>
+        </li>
+
+      </ul>
+    </div>
+
+    <!-- Transactions Dropdown -->
+    <div class="dropdown">
+      <a href="#" class="dropdown-toggle text-white px-3 py-2 d-flex justify-content-between align-items-center"
+        data-bs-toggle="dropdown">
+        <span><i class="bi bi-journal-plus"></i> Transactions</span>
       </a>
-    </li>
+      <ul class="dropdown-menu dropdown-menu-dark border-0 shadow w-100 ms-3">
+        <li><a class="dropdown-item" href="/gl/add-transaction?type=receipt">Receipt Voucher</a></li>
+        <li><a class="dropdown-item" href="/gl/add-transaction?type=payment">Payment Voucher</a></li>
+      </ul>
+    </div>
 
-    <li>
-      <a class="dropdown-item" href="/gl/chart">
-        Chart Of Accounts
+    <!-- Reports Dropdown (NEW) -->
+    <div class="dropdown">
+      <a href="#" class="dropdown-toggle text-white px-3 py-2 d-flex justify-content-between align-items-center"
+        data-bs-toggle="dropdown">
+        <span><i class="bi bi-file-text"></i> Reports</span>
       </a>
-    </li>
+      <ul class="dropdown-menu dropdown-menu-dark border-0 shadow w-100 ms-3">
+        <li><a class="dropdown-item" href="/trial-balance">Trial Balance</a></li>
+        <li><a class="dropdown-item" href="/cash-book">Cash Book</a></li>
+        <li><a class="dropdown-item" href="/report">GL Transactions</a></li>
+      </ul>
+    </div>
 
-  </ul>
-</div>
+    <a href="/setup/settings"><i class="bi bi-gear"></i> Setup</a>
 
-  <!-- Transactions Dropdown -->
-  <div class="dropdown">
-    <a href="#" class="dropdown-toggle text-white px-3 py-2 d-flex justify-content-between align-items-center" data-bs-toggle="dropdown">
-      <span><i class="bi bi-journal-plus"></i> Transactions</span>
-    </a>
-    <ul class="dropdown-menu dropdown-menu-dark border-0 shadow w-100 ms-3">
-      <li><a class="dropdown-item" href="/gl/add-transaction?type=receipt">Receipt Voucher</a></li>
-      <li><a class="dropdown-item" href="/gl/add-transaction?type=payment">Payment Voucher</a></li>
-    </ul>
+    <% if (currentUser && currentUser.role==='admin' ) { %>
+      <a href="/users"><i class="bi bi-people"></i> Manage Users</a>
+      <% } %>
   </div>
-
-  <!-- Reports Dropdown (NEW) -->
-  <div class="dropdown">
-    <a href="#" class="dropdown-toggle text-white px-3 py-2 d-flex justify-content-between align-items-center" data-bs-toggle="dropdown">
-      <span><i class="bi bi-file-text"></i> Reports</span>
-    </a>
-    <ul class="dropdown-menu dropdown-menu-dark border-0 shadow w-100 ms-3">
-      <li><a class="dropdown-item" href="/trial-balance">Trial Balance</a></li>
-      <li><a class="dropdown-item" href="/cash-book">Cash Book</a></li>
-      <li><a class="dropdown-item" href="/report">GL Transactions</a></li>
-    </ul>
-  </div>
-
-  <a href="/setup/settings"><i class="bi bi-gear"></i> Setup</a>
-
-  <% if (currentUser && currentUser.role === 'admin') { %>
-    <a href="/users"><i class="bi bi-people"></i> Manage Users</a>
-  <% } %>
-</div>
 
 
   <!-- 📋 Topbar -->
@@ -226,16 +230,23 @@
       <div class="fw-semibold">
         <i class="bi bi-person-circle"></i>
         <% if (currentUser) { %>
-          <span><%= currentUser.username %></span>
-        <% } else { %>
-          Guest
-        <% } %>
+          <span>
+            <%= currentUser.username %>
+          </span>
+          <% } else { %>
+            Guest
+            <% } %>
       </div>
 
       <!-- 🧮 Calculator -->
       <div class="calculator-btn" data-bs-toggle="modal" data-bs-target="#calculatorModal">
         <i class="bi bi-calculator"></i>
       </div>
+
+      <!-- 📋 Day Summary -->
+      <a href="/daily-posting" class="calculator-btn text-decoration-none text-dark">
+        <i class="bi bi-calendar-check"></i> Day Summary
+      </a>
 
       <!-- 📅 Date & Time -->
       <div class="time-date">
@@ -251,14 +262,16 @@
       <!-- 👤 User Dropdown (Company Code shown here) -->
       <% if (currentUser) { %>
         <div class="dropdown">
-          <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+          <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="userDropdown"
+            data-bs-toggle="dropdown" aria-expanded="false">
             <%= currentUser.company_code %>
           </button>
           <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="userDropdown">
-            <li><a class="dropdown-item text-danger" href="/logout"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
+            <li><a class="dropdown-item text-danger" href="/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
+            </li>
           </ul>
         </div>
-      <% } %>
+        <% } %>
     </div>
   </div>
 
@@ -269,34 +282,34 @@
 
   <!-- 🧮 Calculator Modal -->
   <div id="calculatorPopup" class="calculator-popup shadow p-2 rounded">
-  <input type="text" id="calcDisplay" class="calculator-display" readonly>
-  <div class="calc-container mt-2">
-    <button class="calc-btn">(</button>
-    <button class="calc-btn">)</button>
-    <button class="calc-btn">%</button>
-    <button class="calc-btn operator text-danger" onclick="clearCalc()">CE</button>
+    <input type="text" id="calcDisplay" class="calculator-display" readonly>
+    <div class="calc-container mt-2">
+      <button class="calc-btn">(</button>
+      <button class="calc-btn">)</button>
+      <button class="calc-btn">%</button>
+      <button class="calc-btn operator text-danger" onclick="clearCalc()">CE</button>
 
-    <button class="calc-btn">7</button>
-    <button class="calc-btn">8</button>
-    <button class="calc-btn">9</button>
-    <button class="calc-btn operator">/</button>
+      <button class="calc-btn">7</button>
+      <button class="calc-btn">8</button>
+      <button class="calc-btn">9</button>
+      <button class="calc-btn operator">/</button>
 
-    <button class="calc-btn">4</button>
-    <button class="calc-btn">5</button>
-    <button class="calc-btn">6</button>
-    <button class="calc-btn operator">*</button>
+      <button class="calc-btn">4</button>
+      <button class="calc-btn">5</button>
+      <button class="calc-btn">6</button>
+      <button class="calc-btn operator">*</button>
 
-    <button class="calc-btn">1</button>
-    <button class="calc-btn">2</button>
-    <button class="calc-btn">3</button>
-    <button class="calc-btn operator">-</button>
+      <button class="calc-btn">1</button>
+      <button class="calc-btn">2</button>
+      <button class="calc-btn">3</button>
+      <button class="calc-btn operator">-</button>
 
-    <button class="calc-btn">0</button>
-    <button class="calc-btn">.</button>
-    <button class="calc-btn equal">=</button>
-    <button class="calc-btn operator">+</button>
+      <button class="calc-btn">0</button>
+      <button class="calc-btn">.</button>
+      <button class="calc-btn equal">=</button>
+      <button class="calc-btn operator">+</button>
+    </div>
   </div>
-</div>
 
   <!-- JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -305,47 +318,47 @@
   <script>
     // 🧮 Calculator logic
     const calcPopup = document.getElementById('calculatorPopup');
-  const calcDisplay = document.getElementById('calcDisplay');
-  const calcButtons = calcPopup.querySelectorAll('.calc-btn');
+    const calcDisplay = document.getElementById('calcDisplay');
+    const calcButtons = calcPopup.querySelectorAll('.calc-btn');
 
-  // Toggle calculator popup
-  document.querySelector('.calculator-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    calcPopup.style.display = calcPopup.style.display === 'block' ? 'none' : 'block';
-  });
+    // Toggle calculator popup
+    document.querySelector('.calculator-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      calcPopup.style.display = calcPopup.style.display === 'block' ? 'none' : 'block';
+    });
 
-  // Hide calculator on outside click
-  document.addEventListener('click', (e) => {
-    if (!calcPopup.contains(e.target) && !e.target.closest('.calculator-btn')) {
-      calcPopup.style.display = 'none';
-    }
-  });
-
-  // Calculator logic
-  calcButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const val = btn.textContent;
-      if (val === 'CE') {
-        clearCalc();
-      } else if (val === '=') {
-        calculate();
-      } else {
-        calcDisplay.value += val;
+    // Hide calculator on outside click
+    document.addEventListener('click', (e) => {
+      if (!calcPopup.contains(e.target) && !e.target.closest('.calculator-btn')) {
+        calcPopup.style.display = 'none';
       }
     });
-  });
 
-  function clearCalc() {
-    calcDisplay.value = '';
-  }
+    // Calculator logic
+    calcButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.textContent;
+        if (val === 'CE') {
+          clearCalc();
+        } else if (val === '=') {
+          calculate();
+        } else {
+          calcDisplay.value += val;
+        }
+      });
+    });
 
-  function calculate() {
-    try {
-      calcDisplay.value = eval(calcDisplay.value) || '';
-    } catch {
-      calcDisplay.value = 'Error';
+    function clearCalc() {
+      calcDisplay.value = '';
     }
-  }
+
+    function calculate() {
+      try {
+        calcDisplay.value = eval(calcDisplay.value) || '';
+      } catch {
+        calcDisplay.value = 'Error';
+      }
+    }
 
     // 📅 Date & Time Display
     function updateDateTime() {
@@ -369,4 +382,5 @@
     });
   </script>
 </body>
+
 </html>

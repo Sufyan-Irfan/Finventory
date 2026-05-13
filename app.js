@@ -638,7 +638,6 @@ app.post('/gl/delete-group/:id', isAuthenticated, async (req, res) => {
 });
 
 // Accounts     
-
 app.get('/gl/accounts', isAuthenticated, async (req, res) => {
   const companyCode = req.session.user.company_code;
 
@@ -1070,87 +1069,143 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
   const companyCode = req.session.user.company_code;
 
   try {
-
-    /* ================= BASIC COUNTS ================= */
     const [[stats]] = await db.query(`
       SELECT
         (SELECT COUNT(*) FROM accounts WHERE company_code = ?) AS total_accounts,
         (SELECT COUNT(DISTINCT voucher_no) FROM transactions WHERE company_code = ?) AS total_transactions
     `, [companyCode, companyCode]);
 
-
-    /* ================= GET CASH ACCOUNT CODE ================= */
     const [[settings]] = await db.query(
       "SELECT cash_account_code FROM company_settings WHERE company_code=?",
       [companyCode]
     );
 
-    if (!settings || !settings.cash_account_code) {
-      return res.render('dashboard', {
-        total_accounts: stats.total_accounts,
-        total_transactions: stats.total_transactions,
-        cash_balances: []
-      });
+    const CASH_ACCOUNT = settings?.cash_account_code;
+
+    // Cash group find karo
+    const [[cashGroup]] = await db.query(
+      `SELECT group_id FROM accounts WHERE account_code = ? AND company_code = ?`,
+      [CASH_ACCOUNT, companyCode]
+    );
+
+    const defaultGroupId = cashGroup?.group_id || null;
+
+    // Saare groups fetch karo
+    const [groups] = await db.query(
+      `SELECT id, group_code, name FROM \`groups\` WHERE company_code = ? ORDER BY group_code`,
+      [companyCode]
+    );
+
+    // Selected group — query param ya default cash group
+    const selectedGroupId = req.query.group_id ? Number(req.query.group_id) : defaultGroupId;
+
+    // Selected group ke accounts with balance
+    let cash_balances = [];
+    if (selectedGroupId) {
+      const [accounts] = await db.query(`
+        SELECT
+          a.account_code,
+          a.name,
+          a.opening_balance,
+          IFNULL(SUM(t.debit),0)   AS debit,
+          IFNULL(SUM(t.credit),0)  AS credit
+        FROM accounts a
+        LEFT JOIN transactions t
+          ON t.account_code = a.account_code
+          AND t.company_code = ?
+        WHERE a.group_id = ? AND a.company_code = ?
+        GROUP BY a.account_code, a.name, a.opening_balance
+        ORDER BY a.account_code
+      `, [companyCode, selectedGroupId, companyCode]);
+
+      cash_balances = accounts.map(a => ({
+        code:    a.account_code,
+        name:    a.name,
+        balance: Number(a.opening_balance || 0) + Number(a.debit || 0) - Number(a.credit || 0)
+      }));
     }
 
-    const CASH_ACCOUNT = settings.cash_account_code;
-
-
-    /* ================= GET CASH GROUP ================= */
-    const [[cashGroup]] = await db.query(`
-      SELECT group_id 
-      FROM accounts 
-      WHERE account_code = ? AND company_code = ?
-    `, [CASH_ACCOUNT, companyCode]);
-
-    if (!cashGroup) {
-      return res.render('dashboard', {
-        total_accounts: stats.total_accounts,
-        total_transactions: stats.total_transactions,
-        cash_balances: []
-      });
-    }
-
-
-    /* ================= CASH ACCOUNTS ================= */
-    const [cashAccounts] = await db.query(`
-      SELECT
-        a.account_code,
-        a.name,
-        a.opening_balance,
-        IFNULL(SUM(t.debit),0) AS debit,
-        IFNULL(SUM(t.credit),0) AS credit
-      FROM accounts a
-      LEFT JOIN transactions t
-        ON t.account_code = a.account_code
-        AND t.company_code = ?
-      WHERE a.group_id = ?
-        AND a.company_code = ?
-      GROUP BY a.account_code, a.name, a.opening_balance
-      ORDER BY a.name
-    `, [companyCode, cashGroup.group_id, companyCode]);
-
-
-    /* ================= FINAL BALANCES ================= */
-    const cash_balances = cashAccounts.map(a => ({
-      name: a.name,
-      balance:
-        Number(a.opening_balance || 0) +
-        Number(a.debit || 0) -
-        Number(a.credit || 0)
-    }));
-
-
-    /* ================= RENDER ================= */
     res.render('dashboard', {
-      total_accounts: stats.total_accounts,
+      total_accounts:     stats.total_accounts,
       total_transactions: stats.total_transactions,
-      cash_balances
+      cash_balances,
+      groups,
+      selectedGroupId,
+      defaultGroupId
     });
 
   } catch (err) {
     console.error("Dashboard error:", err);
     res.status(500).send("Dashboard error");
+  }
+});
+
+// ==================== DAILY POSTING ====================
+app.get('/daily-posting', isAuthenticated, async (req, res) => {
+  const companyCode = req.session.user.company_code;
+  const dateParam = req.query.date;
+  const today = new Date().toISOString().split('T')[0];
+  const selectedDate = dateParam || today;
+
+  try {
+    const [rows] = await db.query(`
+      SELECT 
+        t.voucher_no,
+        DATE_FORMAT(t.date, '%d-%m-%Y') AS formatted_date,
+        t.description,
+        t.debit,
+        t.credit,
+        t.account_code,
+        a.name AS account_name,
+        g.group_code
+      FROM transactions t
+      JOIN accounts a ON a.account_code = t.account_code 
+                      AND a.company_code = t.company_code
+      JOIN \`groups\` g ON g.id = a.group_id
+      WHERE t.company_code = ?
+      AND DATE(t.date) = ?
+      ORDER BY t.voucher_no, t.id
+    `, [companyCode, selectedDate]);
+
+    // Cash/Bank group codes — apne hisaab se adjust karo
+    // Jo bhi group code cash ya bank ka ho
+    const CASH_BANK_GROUPS = ['1510', '1511', '1512', '1520']; // <-- apne group codes yahan daalo
+
+    const voucherMap = {};
+    rows.forEach(r => {
+      const key = r.voucher_no || 'NO-VOUCHER';
+      if (!voucherMap[key]) voucherMap[key] = [];
+      voucherMap[key].push(r);
+    });
+
+    const entries = [];
+    Object.entries(voucherMap).forEach(([voucherNo, lines]) => {
+      const cashLine    = lines.find(l => CASH_BANK_GROUPS.some(gc => String(l.account_code).startsWith(gc)));
+      const accountLine = lines.find(l => !CASH_BANK_GROUPS.some(gc => String(l.account_code).startsWith(gc)));
+
+      if (!accountLine) return;
+
+      const cashDebit  = Number(cashLine?.debit  || 0);
+      const cashCredit = Number(cashLine?.credit || 0);
+
+      entries.push({
+        voucher_no:     voucherNo,
+        formatted_date: accountLine.formatted_date,
+        description:    accountLine.description || '',
+        account_code:   accountLine.account_code,
+        account_name:   accountLine.account_name,
+        cash_code:      cashLine?.account_code || '-',
+        cash_name:      cashLine?.account_name || '-',
+        debit:  cashCredit > 0 ? cashCredit : 0,
+        credit: cashDebit  > 0 ? cashDebit  : 0,
+      });
+    });
+
+    res.render('daily-posting', { entries, selectedDate, fmt });
+
+  } catch (err) {
+    console.error('Daily posting error:', err);
+    res.status(500).send('Error loading daily posting');
   }
 });
 
