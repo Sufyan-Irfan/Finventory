@@ -496,7 +496,7 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
            account_code, debit, credit, description, reference, invoice, company_code)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [entry_type, voucher_type, trxDate, voucher_no, serial_no,
-            account_code, debit, credit, description, reference, invoice, companyCode]);
+          account_code, debit, credit, description, reference, invoice, companyCode]);
 
         // CASH ENTRY
         await conn.query(`
@@ -505,7 +505,7 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
            account_code, debit, credit, description, reference, invoice, company_code)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [entry_type, voucher_type, trxDate, voucher_no, serial_no,
-            cashCode, credit, debit, description, reference, invoice, companyCode]);
+          cashCode, credit, debit, description, reference, invoice, companyCode]);
 
         txnCount += 2;
       }
@@ -540,7 +540,7 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
     console.error("IMPORT ERROR:", err);
 
     // 🔥 conn release karo agar open hai
-    try { if (conn) { await conn.rollback(); conn.release(); } } catch(e) {}
+    try { if (conn) { await conn.rollback(); conn.release(); } } catch (e) { }
 
     const [settingsData] = await db.query(
       'SELECT * FROM company_settings WHERE company_code = ?',
@@ -816,8 +816,8 @@ app.get('/gl/add-transaction', isAuthenticated, async (req, res) => {
     }
 
     // ✅ FIX: account names fetch karo taake search box mein show hon
-    const partyCode  = partyRow.account_code;
-    const cashCode   = cashRow?.account_code || cashAccount;
+    const partyCode = partyRow.account_code;
+    const cashCode = cashRow?.account_code || cashAccount;
 
     const [[partyAcc]] = await db.query(
       "SELECT name FROM accounts WHERE account_code=? AND company_code=?",
@@ -833,15 +833,15 @@ app.get('/gl/add-transaction', isAuthenticated, async (req, res) => {
       date: dateStr,
       serial_no: partyRow.serial_no,
       // party
-      account_code:      partyCode,
-      account_name:      partyAcc?.name || partyCode,   // ✅ NEW
+      account_code: partyCode,
+      account_name: partyAcc?.name || partyCode,   // ✅ NEW
       // cash
-      cash_account:      cashCode,
-      cash_account_name: cashAcc?.name  || cashCode,    // ✅ NEW
+      cash_account: cashCode,
+      cash_account_name: cashAcc?.name || cashCode,    // ✅ NEW
       // rest
       description: partyRow.description,
-      reference:   partyRow.reference,
-      invoice:     partyRow.invoice,
+      reference: partyRow.reference,
+      invoice: partyRow.invoice,
       amount
     };
   }
@@ -1119,14 +1119,14 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
       `, [companyCode, selectedGroupId, companyCode]);
 
       cash_balances = accounts.map(a => ({
-        code:    a.account_code,
-        name:    a.name,
+        code: a.account_code,
+        name: a.name,
         balance: Number(a.opening_balance || 0) + Number(a.debit || 0) - Number(a.credit || 0)
       }));
     }
 
     res.render('dashboard', {
-      total_accounts:     stats.total_accounts,
+      total_accounts: stats.total_accounts,
       total_transactions: stats.total_transactions,
       cash_balances,
       groups,
@@ -1148,6 +1148,36 @@ app.get('/daily-posting', isAuthenticated, async (req, res) => {
   const selectedDate = dateParam || today;
 
   try {
+    // Cash account code fetch karo
+    const [[settings]] = await db.query(
+      'SELECT cash_account_code FROM company_settings WHERE company_code = ?',
+      [companyCode]
+    );
+    const cashCode = settings?.cash_account_code;
+
+    // Cash group_id nikalo — exact match on account_code
+    let cashGroupId = null;
+    if (cashCode) {
+      const [[cashAcc]] = await db.query(
+        `SELECT group_id FROM accounts WHERE account_code = ? AND company_code = ?`,
+        [cashCode, companyCode]
+      );
+      cashGroupId = cashAcc?.group_id;
+    }
+
+    // Us group ke saare accounts — yeh cash/bank hain
+    let CASH_CODES = new Set();
+    if (cashGroupId) {
+      const [cashAccList] = await db.query(
+        `SELECT account_code FROM accounts WHERE group_id = ? AND company_code = ?`,
+        [cashGroupId, companyCode]
+      );
+      CASH_CODES = new Set(cashAccList.map(a => String(a.account_code).trim()));
+    }
+    // Agar cashCode khud bhi CASH_CODES mein nahi hai to add karo (fallback)
+    if (cashCode) CASH_CODES.add(String(cashCode).trim());
+
+    // Us din ki saari transactions — LEFT JOIN so cash rows don't get dropped
     const [rows] = await db.query(`
       SELECT 
         t.voucher_no,
@@ -1156,21 +1186,16 @@ app.get('/daily-posting', isAuthenticated, async (req, res) => {
         t.debit,
         t.credit,
         t.account_code,
-        a.name AS account_name,
-        g.group_code
+        COALESCE(a.name, t.account_code) AS account_name
       FROM transactions t
-      JOIN accounts a ON a.account_code = t.account_code 
+      LEFT JOIN accounts a ON a.account_code = t.account_code 
                       AND a.company_code = t.company_code
-      JOIN \`groups\` g ON g.id = a.group_id
       WHERE t.company_code = ?
       AND DATE(t.date) = ?
       ORDER BY t.voucher_no, t.id
     `, [companyCode, selectedDate]);
 
-    // Cash/Bank group codes — apne hisaab se adjust karo
-    // Jo bhi group code cash ya bank ka ho
-    const CASH_BANK_GROUPS = ['1510', '1511', '1512', '1520']; // <-- apne group codes yahan daalo
-
+    // Voucher wise group
     const voucherMap = {};
     rows.forEach(r => {
       const key = r.voucher_no || 'NO-VOUCHER';
@@ -1179,25 +1204,48 @@ app.get('/daily-posting', isAuthenticated, async (req, res) => {
     });
 
     const entries = [];
-    Object.entries(voucherMap).forEach(([voucherNo, lines]) => {
-      const cashLine    = lines.find(l => CASH_BANK_GROUPS.some(gc => String(l.account_code).startsWith(gc)));
-      const accountLine = lines.find(l => !CASH_BANK_GROUPS.some(gc => String(l.account_code).startsWith(gc)));
 
-      if (!accountLine) return;
+    const isCashCode = (code) => CASH_CODES.has(String(code).trim());
 
-      const cashDebit  = Number(cashLine?.debit  || 0);
+    Object.entries(voucherMap).forEach(([voucherNo, voucherLines]) => {
+      let cashLine = voucherLines.find(l => isCashCode(l.account_code));
+      let accountLine = voucherLines.find(l => !isCashCode(l.account_code));
+
+      // Fallback: agar CASH_CODES se detect nahi hua aur 2 lines hain,
+      // to pehli line = account, doosri line = cash
+      if (!cashLine && voucherLines.length >= 2) {
+        accountLine = voucherLines[0];
+        cashLine = voucherLines[1];
+      }
+
+      if (!accountLine) {
+        accountLine = voucherLines[0];
+      }
+
+      const cashDebit = Number(cashLine?.debit || 0);
       const cashCredit = Number(cashLine?.credit || 0);
 
+      let debit = 0;
+      let credit = 0;
+
+      if (cashLine) {
+        debit = cashCredit > 0 ? cashCredit : 0;
+        credit = cashDebit > 0 ? cashDebit : 0;
+      } else {
+        debit = Number(accountLine.debit || 0);
+        credit = Number(accountLine.credit || 0);
+      }
+
       entries.push({
-        voucher_no:     voucherNo,
+        voucher_no: voucherNo,
         formatted_date: accountLine.formatted_date,
-        description:    accountLine.description || '',
-        account_code:   accountLine.account_code,
-        account_name:   accountLine.account_name,
-        cash_code:      cashLine?.account_code || '-',
-        cash_name:      cashLine?.account_name || '-',
-        debit:  cashCredit > 0 ? cashCredit : 0,
-        credit: cashDebit  > 0 ? cashDebit  : 0,
+        description: accountLine.description || '',
+        account_code: accountLine.account_code,
+        account_name: accountLine.account_name,
+        cash_code: cashLine ? cashLine.account_code : '-',
+        cash_name: cashLine ? (cashLine.account_name || cashLine.account_code) : '-',
+        debit,
+        credit,
       });
     });
 
@@ -1244,7 +1292,7 @@ app.post('/report-result', isAuthenticated, async (req, res) => {
   };
 
   const formattedStart = parseDMY(start_date);
-  const formattedEnd   = parseDMY(end_date);
+  const formattedEnd = parseDMY(end_date);
 
   try {
     // From - To range ke accounts
@@ -1276,7 +1324,7 @@ app.post('/report-result', isAuthenticated, async (req, res) => {
 
       const opening_balance =
         Number(acc.opening_balance || 0) +
-        Number(prev.debit  || 0) -
+        Number(prev.debit || 0) -
         Number(prev.credit || 0);
 
       // Transactions
