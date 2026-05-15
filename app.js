@@ -1191,7 +1191,7 @@ app.get('/daily-posting', isAuthenticated, async (req, res) => {
       LEFT JOIN accounts a ON a.account_code = t.account_code 
                       AND a.company_code = t.company_code
       WHERE t.company_code = ?
-      AND DATE(t.date) = ?
+      AND DATE(t.created_at) = ?
       ORDER BY t.voucher_no, t.id
     `, [companyCode, selectedDate]);
 
