@@ -1500,7 +1500,6 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
   const { start_date, end_date } = req.body;
   const company_code = req.session.user.company_code;
 
-  // ← cash_account form se nahi, DB se lo
   const [[settings]] = await db.query(
     "SELECT cash_account_code FROM company_settings WHERE company_code = ?",
     [company_code]
@@ -1508,18 +1507,11 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
   const CASH = settings?.cash_account_code;
 
   if (!CASH) {
-    if (!CASH) {
-      return res.render('cash-book-result', {
-        error: 'Cash account not set in company settings!',
-        rows: [],
-        totals: { debit: 0, credit: 0 },
-        opening: 0,
-        start_date,
-        end_date,
-        company_code,
-        cash_account: ''
-      });
-    }
+    return res.render('cash-book-result', {
+      error: 'Cash account not set in company settings!',
+      rows: [], totals: { debit: 0, credit: 0 },
+      opening: 0, start_date, end_date, company_code, cash_account: ''
+    });
   }
 
   const parseDMY = d => {
@@ -1533,46 +1525,37 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
   const eDate = parseDMY(end_date);
 
   try {
+    // Opening balance
     const [[{ opening }]] = await db.query(`
-      SELECT IFNULL(SUM(debit - credit),0) AS opening
+      SELECT IFNULL(SUM(debit - credit), 0) AS opening
       FROM transactions
       WHERE account_code = ?
-        AND date < ?
+        AND DATE(date) < ?
         AND company_code = ?
     `, [CASH, sDate, company_code]);
 
+    // ✅ Subquery hata di — simple flat query
     const [rows] = await db.query(`
       SELECT
-        DATE_FORMAT(c.date,'%d-%m-%Y') AS date,
+        DATE_FORMAT(c.date, '%d-%m-%Y') AS date,
         c.voucher_no,
         c.description,
         c.reference,
         c.debit,
-        c.credit,
-        (
-          SELECT IFNULL(SUM(x.debit - x.credit),0)
-          FROM transactions x
-          WHERE x.account_code = ?
-            AND x.date <= c.date
-            AND x.company_code = ?
-        ) AS balance
+        c.credit
       FROM transactions c
-      JOIN transactions o
-        ON o.voucher_no = c.voucher_no
-       AND o.account_code <> c.account_code
-       AND o.company_code = c.company_code
-      JOIN accounts a
-        ON a.account_code = o.account_code
-       AND a.company_code = c.company_code
       WHERE c.account_code = ?
         AND c.company_code = ?
-        AND c.date BETWEEN ? AND ?
+        AND DATE(c.date) BETWEEN ? AND ?
       ORDER BY c.date, c.id
-    `, [
-      CASH, company_code,
-      CASH, company_code,
-      sDate, eDate
-    ]);
+    `, [CASH, company_code, sDate, eDate]);
+
+    // ✅ Running balance JS mein
+    let runningBalance = Number(opening || 0);
+    const rowsWithBalance = rows.map(r => {
+      runningBalance += Number(r.debit || 0) - Number(r.credit || 0);
+      return { ...r, balance: runningBalance };
+    });
 
     const totals = {
       debit: rows.reduce((s, r) => s + Number(r.debit || 0), 0),
@@ -1580,7 +1563,7 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
     };
 
     res.render('cash-book-result', {
-      rows,
+      rows: rowsWithBalance,
       totals,
       opening,
       start_date,
@@ -1594,14 +1577,9 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
     console.error('Cash book error:', err);
     res.render('cash-book-result', {
       error: 'Error loading cash book',
-      rows: [],
-      totals: { debit: 0, credit: 0 },
-      opening: 0,
-      start_date,
-      end_date,
-      fmt,
-      company_code,
-      cash_account: CASH || ''
+      rows: [], totals: { debit: 0, credit: 0 },
+      opening: 0, start_date, end_date, fmt,
+      company_code, cash_account: CASH || ''
     });
   }
 });

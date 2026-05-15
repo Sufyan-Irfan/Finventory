@@ -19,25 +19,25 @@
 
         <div class="row g-3">
 
-          <div class="col-md-4">
+          <div class="col-12 col-sm-6 col-md-4">
             <label class="form-label">Date</label>
             <input type="text" id="date_display" class="form-control" required>
           </div>
 
-          <div class="col-md-4">
+          <div class="col-6 col-md-4">
             <label class="form-label">Voucher No</label>
             <input type="text" id="voucher_no" name="voucher_no" class="form-control bg-light" readonly
               value="<%= editData ? editData.voucher_no : '' %>">
           </div>
 
-          <div class="col-md-4">
+          <div class="col-6 col-md-4">
             <label class="form-label">Serial No</label>
             <input type="text" name="serial_no" class="form-control"
               value="<%= editData ? editData.serial_no : '' %>">
           </div>
 
           <!-- PARTY ACCOUNT SEARCH -->
-          <div class="col-md-6" style="position:relative;">
+          <div class="col-12 col-md-6" style="position:relative;">
             <label class="form-label">Account</label>
             <input type="text" id="accountSearch" class="form-control"
                    placeholder="Type code or name..." autocomplete="off">
@@ -48,43 +48,43 @@
             </div>
           </div>
 
-          <div class="col-md-6">
+          <div class="col-12 col-md-6">
             <label class="form-label">Account Balance</label>
             <input type="text" id="accountBalance" class="form-control bg-light" readonly value="0.00">
           </div>
 
-          <div class="col-md-12">
+          <div class="col-12">
             <label class="form-label">Narration</label>
             <input type="text" name="description" class="form-control"
               value="<%= editData ? editData.description || '' : '' %>">
           </div>
 
-          <div class="col-md-6">
+          <div class="col-12 col-sm-6">
             <label class="form-label">Reference</label>
             <input type="text" name="reference" class="form-control"
               value="<%= editData ? editData.reference || '' : '' %>">
           </div>
 
-          <div class="col-md-6">
+          <div class="col-12 col-sm-6">
             <label class="form-label">Invoice</label>
             <input type="text" name="invoice" class="form-control"
               value="<%= editData ? editData.invoice || '' : '' %>">
           </div>
 
-          <div class="col-md-6">
+          <div class="col-6 col-md-6">
             <label class="form-label">Amount</label>
             <input type="number" name="amount" step="0.01" class="form-control" required
               value="<%= editData ? editData.amount : '' %>">
           </div>
 
-          <div class="col-md-6">
+          <div class="col-6 col-md-6">
             <label class="form-label">Batch Total</label>
             <input type="text" id="batch_total" class="form-control bg-light" readonly
               value="<%= editData ? editData.amount : '0.00' %>">
           </div>
 
           <!-- CASH / BANK ACCOUNT SEARCH -->
-          <div class="col-md-6" style="position:relative;">
+          <div class="col-12 col-md-6" style="position:relative;">
             <label class="form-label">
               Cash / Bank Account
               <small class="text-muted">(default: company cash)</small>
@@ -97,7 +97,7 @@
             </div>
           </div>
 
-          <div class="col-md-6">
+          <div class="col-12 col-md-6">
             <label class="form-label">Cash / Bank Balance</label>
             <input type="text" id="cashInHand" class="form-control bg-light" readonly value="0.00">
           </div>

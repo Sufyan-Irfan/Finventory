@@ -29,23 +29,23 @@
   <!-- ================= COMPANY SETTINGS ================= -->
   <form action="/setup/settings" method="POST" class="p-3 bg-light rounded shadow-sm mb-4">
     <div class="row">
-      <div class="col-md-6 mb-2">
+      <div class="col-12 col-sm-6 col-md-6 mb-2">
         <label>Cash Account Code</label>
         <input type="text" name="cash_account_code" value="<%= settings.cash_account_code || '' %>" class="form-control">
       </div>
-      <div class="col-md-6 mb-2">
+      <div class="col-12 col-sm-6 col-md-6 mb-2">
         <label>Receipt Voucher Prefix</label>
         <input type="text" name="voucher_prefix_receipt" value="<%= settings.voucher_prefix_receipt || '' %>" class="form-control">
       </div>
-      <div class="col-md-6 mb-2">
+      <div class="col-12 col-sm-6 col-md-6 mb-2">
         <label>Payment Voucher Prefix</label>
         <input type="text" name="voucher_prefix_payment" value="<%= settings.voucher_prefix_payment || '' %>" class="form-control">
       </div>
-      <div class="col-md-6 mb-2">
+      <div class="col-12 col-sm-6 col-md-6 mb-2">
         <label>Financial Year Start</label>
         <input type="date" name="financial_year_start" value="<%= settings.financial_year_start || '' %>" class="form-control">
       </div>
-      <div class="col-md-6 mb-3">
+      <div class="col-12 col-sm-6 col-md-6 mb-3">
         <label>Financial Year End</label>
         <input type="date" name="financial_year_end" value="<%= settings.financial_year_end || '' %>" class="form-control">
       </div>
@@ -61,7 +61,7 @@
 
   <form action="/setup/import-data" method="POST" enctype="multipart/form-data" class="p-3 bg-light rounded shadow-sm">
     <div class="row mb-3">
-      <div class="col-md-6">
+      <div class="col-12 col-md-6">
         <label>Select Import Type</label>
         <select name="import_type" id="importType" class="form-control" required>
           <option value="">-- Select Type --</option>
@@ -96,7 +96,7 @@
     </div>
 
     <div class="row align-items-end">
-      <div class="col-md-8">
+      <div class="col-12 col-md-8">
         <label>Select File</label>
         <input type="file" name="dataFile" accept=".csv,.xls,.xlsx" class="form-control" required>
       </div>

@@ -1,5 +1,5 @@
-<div class="container mt-4">
-  <h2 class="mb-4">✏️ Edit Voucher – <%= voucher_no %>
+<div class="container-fluid mt-4 px-3 px-md-4">
+  <h2 class="mb-4" style="font-size:1.4rem;">✏️ Edit Voucher – <%= voucher_no %>
   </h2>
 
   <% entries.forEach(row=> { %>
@@ -9,32 +9,32 @@
       <div class="row g-3">
 
         <!-- Date -->
-        <div class="col-md-3">
+        <div class="col-6 col-md-3">
           <label class="form-label">Date</label>
           <input type="date" name="date" value="<%= new Date(row.date).toISOString().split('T')[0] %>" required
             class="form-control">
         </div>
 
         <!-- Voucher No -->
-        <div class="col-md-3">
+        <div class="col-6 col-md-3">
           <label class="form-label">Voucher No</label>
           <input type="text" value="<%= voucher_no %>" readonly class="form-control bg-light">
         </div>
 
         <!-- Serial -->
-        <div class="col-md-3">
+        <div class="col-6 col-md-3">
           <label class="form-label">Serial No</label>
           <input type="text" name="serial_no" value="<%= row.serial_no || '' %>" class="form-control">
         </div>
 
         <!-- Entry Type -->
-        <div class="col-md-3">
+        <div class="col-6 col-md-3">
           <label class="form-label">Entry Type</label>
           <input type="text" value="<%= row.entry_type %>" readonly class="form-control bg-light">
         </div>
 
         <!-- Account -->
-        <div class="col-md-6">
+        <div class="col-12 col-md-6">
           <label class="form-label">Account</label>
           <select name="account_code" class="form-select" required>
             <% accounts.forEach(a=> { %>
@@ -46,31 +46,31 @@
         </div>
 
         <!-- Narration -->
-        <div class="col-md-6">
+        <div class="col-12 col-md-6">
           <label class="form-label">Narration</label>
           <input type="text" name="description" value="<%= row.description || '' %>" class="form-control">
         </div>
 
         <!-- Reference -->
-        <div class="col-md-4">
+        <div class="col-12 col-sm-6 col-md-4">
           <label class="form-label">Reference</label>
           <input type="text" name="reference" value="<%= row.reference || '' %>" class="form-control">
         </div>
 
         <!-- Invoice -->
-        <div class="col-md-4">
+        <div class="col-12 col-sm-6 col-md-4">
           <label class="form-label">Invoice</label>
           <input type="text" name="invoice" value="<%= row.invoice || '' %>" class="form-control">
         </div>
 
         <!-- Debit -->
-        <div class="col-md-2">
+        <div class="col-6 col-md-2">
           <label class="form-label">Debit</label>
           <input type="number" step="0.01" name="debit" value="<%= row.debit || '' %>" class="form-control">
         </div>
 
         <!-- Credit -->
-        <div class="col-md-2">
+        <div class="col-6 col-md-2">
           <label class="form-label">Credit</label>
           <input type="number" step="0.01" name="credit" value="<%= row.credit || '' %>" class="form-control">
         </div>

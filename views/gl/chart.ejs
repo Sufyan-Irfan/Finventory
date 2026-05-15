@@ -3,6 +3,7 @@
     max-width: 900px;
     margin: 20px auto;
     font-family: Arial;
+    padding: 0 10px;
   }
 
   .coa-title {
@@ -32,6 +33,7 @@
     padding: 10px 15px;
     border-bottom: 1px solid #eee;
     transition: 0.2s;
+    gap: 10px;
   }
 
   .account-row:last-child {
@@ -45,10 +47,19 @@
   .acc-code {
     font-weight: 600;
     color: #333;
+    flex-shrink: 0;
   }
 
   .acc-name {
     color: #555;
+    text-align: right;
+    word-break: break-word;
+  }
+
+  @media (max-width: 576px) {
+    .coa-title { font-size: 18px; }
+    .group-header { font-size: 14px; padding: 8px 12px; }
+    .account-row { padding: 8px 12px; font-size: 13px; }
   }
 </style>
 

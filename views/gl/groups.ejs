@@ -18,6 +18,7 @@ input {
   padding: 10px;
   border-radius: 8px;
   border: 1px solid #ccc;
+  box-sizing: border-box;
 }
 
 .btn {
@@ -48,6 +49,16 @@ td {
   padding: 10px;
   border-bottom: 1px solid #eee;
 }
+
+@media (max-width: 576px) {
+  .card { padding: 12px; margin: 10px; }
+  table th, table td { font-size: 13px; padding: 6px 8px; }
+  .btn { padding: 8px 10px; font-size: 13px; }
+  .action-btns { display: flex; flex-direction: column; gap: 4px; }
+  .action-btns .btn { width: 100%; }
+  .action-btns form { width: 100%; }
+  .action-btns form .btn { width: 100%; }
+}
 </style>
 
 <div class="card">
@@ -68,6 +79,7 @@ td {
 <div class="card">
   <h2>Groups List</h2>
 
+  <div style="overflow-x:auto;">
   <table>
     <tr>
       <th>Code</th>
@@ -80,7 +92,7 @@ td {
       <td><%= g.group_code %></td>
       <td><%= g.name %></td>
       <td>
-
+        <div class="action-btns">
         <button class="btn btn-warning"
           onclick="editGroup(<%= g.id %>, '<%= g.group_code %>', '<%= g.name %>')">
           Edit
@@ -92,11 +104,12 @@ td {
             Delete
           </button>
         </form>
-
+        </div>
       </td>
     </tr>
     <% }) %>
   </table>
+  </div>
 </div>
 
 <script>
