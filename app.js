@@ -1138,8 +1138,8 @@ app.get('/daily-posting', isAuthenticated, async (req, res) => {
   const companyCode = req.session.user.company_code;
   const today = new Date().toISOString().split('T')[0];
 
-  const selectedDate = req.query.date    || today;  // entry date (t.date)
-  const postingDate  = req.query.posting || today;  // posting date (t.created_at)
+  const selectedDate = req.query.date || today;
+  const dateType     = req.query.type || 'posting'; // 'posting' ya 'entry'
 
   try {
     const [[settings]] = await db.query(
@@ -1160,7 +1160,9 @@ app.get('/daily-posting', isAuthenticated, async (req, res) => {
       CASH_CODES.add(String(cashCode).trim());
     }
 
-    // ✅ Dono dates se filter — OR condition
+    // ✅ dateType ke hisaab se filter
+    const dateColumn = dateType === 'entry' ? 'DATE(t.date)' : 'DATE(t.created_at)';
+
     const [rows] = await db.query(`
       SELECT 
         t.voucher_no,
@@ -1174,14 +1176,10 @@ app.get('/daily-posting', isAuthenticated, async (req, res) => {
       LEFT JOIN accounts a ON a.account_code = t.account_code 
                           AND a.company_code = t.company_code
       WHERE t.company_code = ?
-      AND (
-        DATE(t.date)       = ?
-        OR DATE(t.created_at) = ?
-      )
+      AND ${dateColumn} = ?
       ORDER BY t.voucher_no, t.id
-    `, [companyCode, selectedDate, postingDate]);
+    `, [companyCode, selectedDate]);
 
-    // Voucher wise group
     const voucherMap = {};
     rows.forEach(r => {
       const key = r.voucher_no || 'NO-VOUCHER';
@@ -1227,7 +1225,7 @@ app.get('/daily-posting', isAuthenticated, async (req, res) => {
       });
     });
 
-    res.render('daily-posting', { entries, selectedDate, postingDate, fmt });
+    res.render('daily-posting', { entries, selectedDate, dateType, fmt });
 
   } catch (err) {
     console.error('Daily posting error:', err);

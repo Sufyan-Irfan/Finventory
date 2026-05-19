@@ -31,18 +31,15 @@
 <body class="container-fluid mt-4 px-3 px-md-4">
 
   <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
-  <h4 class="mb-0">📋 Daily Posting</h4>
-  
-  <div class="d-flex align-items-center gap-2">
-    <label class="mb-0 text-muted" style="font-size:13px;">Entry Date:</label>
-    <input type="text" id="dateInput" class="form-control" style="width:140px;" placeholder="dd-mm-yyyy">
-  </div>
+    <h4 class="mb-0">📋 Daily Posting</h4>
 
-  <div class="d-flex align-items-center gap-2">
-    <label class="mb-0 text-muted" style="font-size:13px;">Posting Date:</label>
-    <input type="text" id="postingDateInput" class="form-control" style="width:140px;" placeholder="dd-mm-yyyy">
+    <select id="dateTypeSelect" class="form-select form-select-sm" style="width:150px;">
+      <option value="posting" <%=dateType==='posting' ? 'selected' : '' %>>Posting Date</option>
+      <option value="entry" <%=dateType==='entry' ? 'selected' : '' %>>Entry Date</option>
+    </select>
+
+    <input type="text" id="dateInput" class="form-control" style="width:145px;">
   </div>
-</div>
 
   <% if (entries.length===0) { %>
     <div class="alert alert-info">No entries found for this date.</div>
@@ -114,10 +111,10 @@
           const parts = "<%= selectedDate %>".split('-');
           const parsedDate = new Date(parts[0], parts[1] - 1, parts[2]);
 
-          const postingParts = "<%= postingDate %>".split('-');
-          const parsedPosting = new Date(postingParts[0], postingParts[1] - 1, postingParts[2]);
+          function navigate(date, type) {
+            window.location.href = `/daily-posting?date=${date}&type=${type}`;
+          }
 
-          // Entry Date picker
           flatpickr("#dateInput", {
             dateFormat: "d-m-Y",
             allowInput: true,
@@ -128,25 +125,12 @@
               const yyyy = d.getFullYear();
               const mm = String(d.getMonth() + 1).padStart(2, '0');
               const dd = String(d.getDate()).padStart(2, '0');
-              const posting = "<%= postingDate %>";
-              window.location.href = `/daily-posting?date=${yyyy}-${mm}-${dd}&posting=${posting}`;
+              navigate(`${yyyy}-${mm}-${dd}`, document.getElementById('dateTypeSelect').value);
             }
           });
 
-          // Posting Date picker
-          flatpickr("#postingDateInput", {
-            dateFormat: "d-m-Y",
-            allowInput: true,
-            defaultDate: parsedPosting,
-            onChange: function (selectedDates) {
-              if (!selectedDates[0]) return;
-              const d = selectedDates[0];
-              const yyyy = d.getFullYear();
-              const mm = String(d.getMonth() + 1).padStart(2, '0');
-              const dd = String(d.getDate()).padStart(2, '0');
-              const entryDate = "<%= selectedDate %>";
-              window.location.href = `/daily-posting?date=${entryDate}&posting=${yyyy}-${mm}-${dd}`;
-            }
+          document.getElementById('dateTypeSelect').addEventListener('change', function () {
+            navigate("<%= selectedDate %>", this.value);
           });
         </script>
 
