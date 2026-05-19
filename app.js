@@ -1240,7 +1240,6 @@ app.get('/report', isAuthenticated, async (req, res) => {
       'SELECT account_code, name FROM accounts WHERE company_code = ? ORDER BY account_code',
       [companyCode]
     );
-    // ❌ accounts.unshift({ account_code: 'ALL', name: 'All Accounts' }); // hata do
 
     const [entryTypes] = await db.query(
       'SELECT DISTINCT entry_type FROM transactions WHERE company_code = ? AND entry_type IS NOT NULL',
@@ -1259,7 +1258,6 @@ app.post('/report-result', isAuthenticated, async (req, res) => {
   let { start_date, end_date, from_account, to_account } = req.body;
   const companyCode = req.session.user.company_code;
 
-  // To blank ho to From hi use karo
   if (!to_account) to_account = from_account;
 
   const parseDMY = d => {
@@ -1268,24 +1266,28 @@ app.post('/report-result', isAuthenticated, async (req, res) => {
   };
 
   const formattedStart = parseDMY(start_date);
-  const formattedEnd = parseDMY(end_date);
+  const formattedEnd   = parseDMY(end_date);
+
+  // ✅ Shahid company ke liye against_account column show hoga
+  const showAgainst = companyCode === 'Shahid';
 
   try {
-    // From - To range ke accounts
     const [accountsList] = await db.query(
       `SELECT account_code, name, opening_balance
        FROM accounts
        WHERE company_code = ?
-       AND account_code >= ? AND account_code <= ?
-       ORDER BY account_code`,
+       AND CAST(account_code AS UNSIGNED) >= CAST(? AS UNSIGNED)
+       AND CAST(account_code AS UNSIGNED) <= CAST(? AS UNSIGNED)
+       ORDER BY CAST(account_code AS UNSIGNED)`,
       [companyCode, from_account, to_account]
     );
 
     if (!accountsList.length)
       return res.status(404).send('No accounts found in this range');
 
-    // ✅ Batch query 1: opening balances for ALL accounts before start_date
-    const accountCodes = accountsList.map(a => a.account_code);
+    const accountCodesNum = accountsList.map(a => Number(a.account_code));
+
+    // Opening balances
     const [prevRows] = await db.query(
       `SELECT account_code,
          COALESCE(SUM(debit),0)  AS debit,
@@ -1293,46 +1295,70 @@ app.post('/report-result', isAuthenticated, async (req, res) => {
        FROM transactions
        WHERE company_code = ? AND DATE(date) < ? AND account_code IN (?)
        GROUP BY account_code`,
-      [companyCode, formattedStart, accountCodes]
+      [companyCode, formattedStart, accountCodesNum]
     );
 
-    // Map for quick lookup
-    const prevMap = {};
-    prevRows.forEach(r => { prevMap[r.account_code] = r; });
+    // Transactions — showAgainst ke hisaab se against_account bhi lao
+    const txnQuery = showAgainst
+      ? `SELECT
+           t.account_code,
+           DATE_FORMAT(t.date,'%d-%m-%Y') AS formatted_date,
+           t.voucher_no, t.description, t.reference, t.debit, t.credit,
+           (
+             SELECT a2.name
+             FROM transactions t2
+             JOIN accounts a2 ON a2.account_code = t2.account_code
+                              AND a2.company_code = t2.company_code
+             WHERE t2.voucher_no   = t.voucher_no
+               AND t2.account_code != t.account_code
+               AND t2.company_code  = t.company_code
+             LIMIT 1
+           ) AS against_account
+         FROM transactions t
+         WHERE t.company_code = ?
+         AND DATE(t.date) BETWEEN ? AND ?
+         AND t.account_code IN (?)
+         ORDER BY t.date, t.id`
+      : `SELECT
+           account_code,
+           DATE_FORMAT(date,'%d-%m-%Y') AS formatted_date,
+           voucher_no, description, reference, debit, credit,
+           NULL AS against_account
+         FROM transactions
+         WHERE company_code = ?
+         AND DATE(date) BETWEEN ? AND ?
+         AND account_code IN (?)
+         ORDER BY date, id`;
 
-    // ✅ Batch query 2: all transactions for ALL accounts in date range
     const [allTxns] = await db.query(
-      `SELECT account_code,
-         DATE_FORMAT(date,'%d-%m-%Y') AS formatted_date,
-         voucher_no, description, reference, debit, credit
-       FROM transactions
-       WHERE company_code = ?
-       AND DATE(date) BETWEEN ? AND ?
-       AND account_code IN (?)
-       ORDER BY date, id`,
-      [companyCode, formattedStart, formattedEnd, accountCodes]
+      txnQuery,
+      [companyCode, formattedStart, formattedEnd, accountCodesNum]
     );
 
-    // Group transactions by account_code
+    // Maps
+    const prevMap = {};
+    prevRows.forEach(r => { prevMap[Number(r.account_code)] = r; });
+
     const txnMap = {};
     allTxns.forEach(t => {
-      if (!txnMap[t.account_code]) txnMap[t.account_code] = [];
-      txnMap[t.account_code].push(t);
+      const key = Number(t.account_code);
+      if (!txnMap[key]) txnMap[key] = [];
+      txnMap[key].push(t);
     });
 
-    // Build results
     const results = accountsList.map(acc => {
-      const prev = prevMap[acc.account_code] || { debit: 0, credit: 0 };
+      const key  = Number(acc.account_code);
+      const prev = prevMap[key] || { debit: 0, credit: 0 };
       const opening_balance =
         Number(acc.opening_balance || 0) +
-        Number(prev.debit || 0) -
+        Number(prev.debit  || 0) -
         Number(prev.credit || 0);
 
       return {
         account_code: acc.account_code,
-        name: acc.name,
+        name:         acc.name,
         opening_balance,
-        transactions: txnMap[acc.account_code] || []
+        transactions: txnMap[key] || []
       };
     });
 
@@ -1342,6 +1368,7 @@ app.post('/report-result', isAuthenticated, async (req, res) => {
       to_account,
       start_date,
       end_date,
+      showAgainst,
       fmt
     });
 
