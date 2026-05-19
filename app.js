@@ -815,18 +815,16 @@ app.get('/gl/add-transaction', isAuthenticated, async (req, res) => {
       dateStr = String(rawDate).slice(0, 10);
     }
 
-    // ✅ FIX: account names fetch karo taake search box mein show hon
+    // ✅ FIX: both account names in 1 query
     const partyCode = partyRow.account_code;
     const cashCode = cashRow?.account_code || cashAccount;
 
-    const [[partyAcc]] = await db.query(
-      "SELECT name FROM accounts WHERE account_code=? AND company_code=?",
-      [partyCode, companyCode]
+    const [accNames] = await db.query(
+      "SELECT account_code, name FROM accounts WHERE account_code IN (?, ?) AND company_code = ?",
+      [partyCode, cashCode, companyCode]
     );
-    const [[cashAcc]] = await db.query(
-      "SELECT name FROM accounts WHERE account_code=? AND company_code=?",
-      [cashCode, companyCode]
-    );
+    const nameMap = {};
+    accNames.forEach(a => { nameMap[a.account_code] = a.name; });
 
     editData = {
       voucher_no,
@@ -1032,25 +1030,26 @@ app.get('/api/account-balance/:code', isAuthenticated, async (req, res) => {
   const companyCode = req.session.user.company_code;
   const code = req.params.code;
 
-  const [[acc]] = await db.query(
-    "SELECT opening_balance FROM accounts WHERE account_code=? AND company_code=?",
-    [code, companyCode]
-  );
+  // ✅ Single query — opening_balance + transaction totals in one shot
+  const [[result]] = await db.query(`
+    SELECT
+      a.opening_balance,
+      COALESCE(SUM(t.debit), 0)  AS total_debit,
+      COALESCE(SUM(t.credit), 0) AS total_credit
+    FROM accounts a
+    LEFT JOIN transactions t
+      ON t.account_code = a.account_code
+     AND t.company_code = a.company_code
+    WHERE a.account_code = ? AND a.company_code = ?
+    GROUP BY a.opening_balance
+  `, [code, companyCode]);
 
-  if (!acc) return res.json({ balance: "0.00" });
-
-  const [[sum]] = await db.query(`
-    SELECT COALESCE(SUM(debit),0) AS debit,
-           COALESCE(SUM(credit),0) AS credit
-    FROM transactions
-    WHERE account_code=? AND company_code=?`,
-    [code, companyCode]
-  );
+  if (!result) return res.json({ balance: "0.00" });
 
   const balance =
-    Number(acc.opening_balance || 0) +
-    Number(sum.debit) -
-    Number(sum.credit);
+    Number(result.opening_balance || 0) +
+    Number(result.total_debit) -
+    Number(result.total_credit);
 
   res.json({ balance: balance.toFixed(2) });
 });
@@ -1069,37 +1068,31 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
   const companyCode = req.session.user.company_code;
 
   try {
-    const [[stats]] = await db.query(`
+    // ✅ 1 query: stats + settings + cashGroup — sab ek mein
+    const [[info]] = await db.query(`
       SELECT
         (SELECT COUNT(*) FROM accounts WHERE company_code = ?) AS total_accounts,
-        (SELECT COUNT(DISTINCT voucher_no) FROM transactions WHERE company_code = ?) AS total_transactions
-    `, [companyCode, companyCode]);
+        (SELECT COUNT(DISTINCT voucher_no) FROM transactions WHERE company_code = ?) AS total_transactions,
+        cs.cash_account_code,
+        a.group_id AS cash_group_id
+      FROM company_settings cs
+      LEFT JOIN accounts a
+        ON a.account_code = cs.cash_account_code
+       AND a.company_code = cs.company_code
+      WHERE cs.company_code = ?
+    `, [companyCode, companyCode, companyCode]);
 
-    const [[settings]] = await db.query(
-      "SELECT cash_account_code FROM company_settings WHERE company_code=?",
-      [companyCode]
-    );
+    const defaultGroupId = info?.cash_group_id || null;
 
-    const CASH_ACCOUNT = settings?.cash_account_code;
-
-    // Cash group find karo
-    const [[cashGroup]] = await db.query(
-      `SELECT group_id FROM accounts WHERE account_code = ? AND company_code = ?`,
-      [CASH_ACCOUNT, companyCode]
-    );
-
-    const defaultGroupId = cashGroup?.group_id || null;
-
-    // Saare groups fetch karo
+    // ✅ 2nd query: groups
     const [groups] = await db.query(
       `SELECT id, group_code, name FROM \`groups\` WHERE company_code = ? ORDER BY group_code`,
       [companyCode]
     );
 
-    // Selected group — query param ya default cash group
     const selectedGroupId = req.query.group_id ? Number(req.query.group_id) : defaultGroupId;
 
-    // Selected group ke accounts with balance
+    // ✅ 3rd query: selected group accounts with balance (only if group selected)
     let cash_balances = [];
     if (selectedGroupId) {
       const [accounts] = await db.query(`
@@ -1126,8 +1119,8 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
     }
 
     res.render('dashboard', {
-      total_accounts: stats.total_accounts,
-      total_transactions: stats.total_transactions,
+      total_accounts: info?.total_accounts || 0,
+      total_transactions: info?.total_transactions || 0,
       cash_balances,
       groups,
       selectedGroupId,
@@ -1143,41 +1136,31 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
 // ==================== DAILY POSTING ====================
 app.get('/daily-posting', isAuthenticated, async (req, res) => {
   const companyCode = req.session.user.company_code;
-  const dateParam = req.query.date;
   const today = new Date().toISOString().split('T')[0];
-  const selectedDate = dateParam || today;
+
+  const selectedDate = req.query.date    || today;  // entry date (t.date)
+  const postingDate  = req.query.posting || today;  // posting date (t.created_at)
 
   try {
-    // Cash account code fetch karo
     const [[settings]] = await db.query(
       'SELECT cash_account_code FROM company_settings WHERE company_code = ?',
       [companyCode]
     );
     const cashCode = settings?.cash_account_code;
 
-    // Cash group_id nikalo — exact match on account_code
-    let cashGroupId = null;
-    if (cashCode) {
-      const [[cashAcc]] = await db.query(
-        `SELECT group_id FROM accounts WHERE account_code = ? AND company_code = ?`,
-        [cashCode, companyCode]
-      );
-      cashGroupId = cashAcc?.group_id;
-    }
-
-    // Us group ke saare accounts — yeh cash/bank hain
     let CASH_CODES = new Set();
-    if (cashGroupId) {
-      const [cashAccList] = await db.query(
-        `SELECT account_code FROM accounts WHERE group_id = ? AND company_code = ?`,
-        [cashGroupId, companyCode]
-      );
+    if (cashCode) {
+      const [cashAccList] = await db.query(`
+        SELECT a2.account_code
+        FROM accounts a1
+        JOIN accounts a2 ON a2.group_id = a1.group_id AND a2.company_code = a1.company_code
+        WHERE a1.account_code = ? AND a1.company_code = ?
+      `, [cashCode, companyCode]);
       CASH_CODES = new Set(cashAccList.map(a => String(a.account_code).trim()));
+      CASH_CODES.add(String(cashCode).trim());
     }
-    // Agar cashCode khud bhi CASH_CODES mein nahi hai to add karo (fallback)
-    if (cashCode) CASH_CODES.add(String(cashCode).trim());
 
-    // Us din ki saari transactions — LEFT JOIN so cash rows don't get dropped
+    // ✅ Dono dates se filter — OR condition
     const [rows] = await db.query(`
       SELECT 
         t.voucher_no,
@@ -1189,11 +1172,14 @@ app.get('/daily-posting', isAuthenticated, async (req, res) => {
         COALESCE(a.name, t.account_code) AS account_name
       FROM transactions t
       LEFT JOIN accounts a ON a.account_code = t.account_code 
-                      AND a.company_code = t.company_code
+                          AND a.company_code = t.company_code
       WHERE t.company_code = ?
-      AND DATE(t.created_at) = ?
+      AND (
+        DATE(t.date)       = ?
+        OR DATE(t.created_at) = ?
+      )
       ORDER BY t.voucher_no, t.id
-    `, [companyCode, selectedDate]);
+    `, [companyCode, selectedDate, postingDate]);
 
     // Voucher wise group
     const voucherMap = {};
@@ -1204,52 +1190,44 @@ app.get('/daily-posting', isAuthenticated, async (req, res) => {
     });
 
     const entries = [];
-
     const isCashCode = (code) => CASH_CODES.has(String(code).trim());
 
     Object.entries(voucherMap).forEach(([voucherNo, voucherLines]) => {
-      let cashLine = voucherLines.find(l => isCashCode(l.account_code));
+      let cashLine    = voucherLines.find(l =>  isCashCode(l.account_code));
       let accountLine = voucherLines.find(l => !isCashCode(l.account_code));
 
-      // Fallback: agar CASH_CODES se detect nahi hua aur 2 lines hain,
-      // to pehli line = account, doosri line = cash
       if (!cashLine && voucherLines.length >= 2) {
         accountLine = voucherLines[0];
-        cashLine = voucherLines[1];
+        cashLine    = voucherLines[1];
       }
+      if (!accountLine) accountLine = voucherLines[0];
 
-      if (!accountLine) {
-        accountLine = voucherLines[0];
-      }
-
-      const cashDebit = Number(cashLine?.debit || 0);
+      const cashDebit  = Number(cashLine?.debit  || 0);
       const cashCredit = Number(cashLine?.credit || 0);
 
-      let debit = 0;
-      let credit = 0;
-
+      let debit = 0, credit = 0;
       if (cashLine) {
-        debit = cashCredit > 0 ? cashCredit : 0;
-        credit = cashDebit > 0 ? cashDebit : 0;
+        debit  = cashCredit > 0 ? cashCredit : 0;
+        credit = cashDebit  > 0 ? cashDebit  : 0;
       } else {
-        debit = Number(accountLine.debit || 0);
+        debit  = Number(accountLine.debit  || 0);
         credit = Number(accountLine.credit || 0);
       }
 
       entries.push({
-        voucher_no: voucherNo,
+        voucher_no:     voucherNo,
         formatted_date: accountLine.formatted_date,
-        description: accountLine.description || '',
-        account_code: accountLine.account_code,
-        account_name: accountLine.account_name,
-        cash_code: cashLine ? cashLine.account_code : '-',
-        cash_name: cashLine ? (cashLine.account_name || cashLine.account_code) : '-',
+        description:    accountLine.description || '',
+        account_code:   accountLine.account_code,
+        account_name:   accountLine.account_name,
+        cash_code:      cashLine ? cashLine.account_code : '-',
+        cash_name:      cashLine ? (cashLine.account_name || cashLine.account_code) : '-',
         debit,
         credit,
       });
     });
 
-    res.render('daily-posting', { entries, selectedDate, fmt });
+    res.render('daily-posting', { entries, selectedDate, postingDate, fmt });
 
   } catch (err) {
     console.error('Daily posting error:', err);
@@ -1308,45 +1286,57 @@ app.post('/report-result', isAuthenticated, async (req, res) => {
     if (!accountsList.length)
       return res.status(404).send('No accounts found in this range');
 
-    // Har account ka data
-    const results = [];
+    // ✅ Batch query 1: opening balances for ALL accounts before start_date
+    const accountCodes = accountsList.map(a => a.account_code);
+    const [prevRows] = await db.query(
+      `SELECT account_code,
+         COALESCE(SUM(debit),0)  AS debit,
+         COALESCE(SUM(credit),0) AS credit
+       FROM transactions
+       WHERE company_code = ? AND DATE(date) < ? AND account_code IN (?)
+       GROUP BY account_code`,
+      [companyCode, formattedStart, accountCodes]
+    );
 
-    for (const acc of accountsList) {
-      // Opening balance before start_date
-      const [[prev]] = await db.query(
-        `SELECT
-           COALESCE(SUM(debit),0)  AS debit,
-           COALESCE(SUM(credit),0) AS credit
-         FROM transactions
-         WHERE company_code = ? AND DATE(date) < ? AND account_code = ?`,
-        [companyCode, formattedStart, acc.account_code]
-      );
+    // Map for quick lookup
+    const prevMap = {};
+    prevRows.forEach(r => { prevMap[r.account_code] = r; });
 
+    // ✅ Batch query 2: all transactions for ALL accounts in date range
+    const [allTxns] = await db.query(
+      `SELECT account_code,
+         DATE_FORMAT(date,'%d-%m-%Y') AS formatted_date,
+         voucher_no, description, reference, debit, credit
+       FROM transactions
+       WHERE company_code = ?
+       AND DATE(date) BETWEEN ? AND ?
+       AND account_code IN (?)
+       ORDER BY date, id`,
+      [companyCode, formattedStart, formattedEnd, accountCodes]
+    );
+
+    // Group transactions by account_code
+    const txnMap = {};
+    allTxns.forEach(t => {
+      if (!txnMap[t.account_code]) txnMap[t.account_code] = [];
+      txnMap[t.account_code].push(t);
+    });
+
+    // Build results
+    const results = accountsList.map(acc => {
+      const prev = prevMap[acc.account_code] || { debit: 0, credit: 0 };
       const opening_balance =
         Number(acc.opening_balance || 0) +
         Number(prev.debit || 0) -
         Number(prev.credit || 0);
 
-      // Transactions
-      const [transactions] = await db.query(
-        `SELECT
-           DATE_FORMAT(date,'%d-%m-%Y') AS formatted_date,
-           voucher_no, description, reference, debit, credit
-         FROM transactions
-         WHERE company_code = ?
-         AND DATE(date) BETWEEN ? AND ?
-         AND account_code = ?
-         ORDER BY date, id`,
-        [companyCode, formattedStart, formattedEnd, acc.account_code]
-      );
-
-      results.push({
+      return {
         account_code: acc.account_code,
         name: acc.name,
         opening_balance,
-        transactions
-      });
-    }
+        transactions: txnMap[acc.account_code] || []
+      };
+    });
 
     res.render('report-result', {
       results,

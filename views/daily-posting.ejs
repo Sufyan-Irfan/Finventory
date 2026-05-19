@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <title>Daily Posting</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,86 +8,148 @@
   <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <style>
-    th, td { font-size: 14px; }
+    th,
+    td {
+      font-size: 14px;
+    }
+
     @media (max-width: 576px) {
-      th, td { font-size: 12px; padding: 4px 6px !important; }
-      h4 { font-size: 1.1rem; }
+
+      th,
+      td {
+        font-size: 12px;
+        padding: 4px 6px !important;
+      }
+
+      h4 {
+        font-size: 1.1rem;
+      }
     }
   </style>
 </head>
+
 <body class="container-fluid mt-4 px-3 px-md-4">
 
   <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
-    <h4 class="mb-0">📋 Daily Posting</h4>
-    <input type="text" id="dateInput" class="form-control" style="width:160px;">
+  <h4 class="mb-0">📋 Daily Posting</h4>
+  
+  <div class="d-flex align-items-center gap-2">
+    <label class="mb-0 text-muted" style="font-size:13px;">Entry Date:</label>
+    <input type="text" id="dateInput" class="form-control" style="width:140px;" placeholder="dd-mm-yyyy">
   </div>
 
-  <% if (entries.length === 0) { %>
+  <div class="d-flex align-items-center gap-2">
+    <label class="mb-0 text-muted" style="font-size:13px;">Posting Date:</label>
+    <input type="text" id="postingDateInput" class="form-control" style="width:140px;" placeholder="dd-mm-yyyy">
+  </div>
+</div>
+
+  <% if (entries.length===0) { %>
     <div class="alert alert-info">No entries found for this date.</div>
-  <% } else { %>
+    <% } else { %>
 
-  <div class="table-responsive">
-  <table class="table table-bordered table-sm">
-    <thead class="table-light">
-      <tr>
-        <th>S.No</th>
-        <th>Date</th>
-        <th>Voucher</th>
-        <th>Account</th>
-        <th>Description</th>
-        <th>Cash / Bank</th>
-        <th class="text-end">Debit</th>
-        <th class="text-end">Credit</th>
-      </tr>
-    </thead>
-    <tbody>
-      <%
-        let grandDebit = 0, grandCredit = 0;
-        entries.forEach((e, i) => {
-          grandDebit  += e.debit;
-          grandCredit += e.credit;
-      %>
-      <tr>
-        <td><%= i + 1 %></td>
-        <td><%= e.formatted_date %></td>
-        <td><%= e.voucher_no %></td>
-        <td><%= e.account_code %> - <%= e.account_name %></td>
-        <td><%= e.description || '-' %></td>
-        <td><%= e.cash_code !== '-' ? e.cash_code + ' - ' + e.cash_name : '-' %></td>
-        <td class="text-end"><%= e.debit  ? fmt(e.debit)  : '' %></td>
-        <td class="text-end"><%= e.credit ? fmt(e.credit) : '' %></td>
-      </tr>
-      <% }) %>
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm">
+          <thead class="table-light">
+            <tr>
+              <th>S.No</th>
+              <th>Date</th>
+              <th>Voucher</th>
+              <th>Account</th>
+              <th>Description</th>
+              <th>Cash / Bank</th>
+              <th class="text-end">Debit</th>
+              <th class="text-end">Credit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% let grandDebit=0, grandCredit=0; entries.forEach((e, i)=> {
+              grandDebit += e.debit;
+              grandCredit += e.credit;
+              %>
+              <tr>
+                <td>
+                  <%= i + 1 %>
+                </td>
+                <td>
+                  <%= e.formatted_date %>
+                </td>
+                <td>
+                  <%= e.voucher_no %>
+                </td>
+                <td>
+                  <%= e.account_code %> - <%= e.account_name %>
+                </td>
+                <td>
+                  <%= e.description || '-' %>
+                </td>
+                <td>
+                  <%= e.cash_code !=='-' ? e.cash_code + ' - ' + e.cash_name : '-' %>
+                </td>
+                <td class="text-end">
+                  <%= e.debit ? fmt(e.debit) : '' %>
+                </td>
+                <td class="text-end">
+                  <%= e.credit ? fmt(e.credit) : '' %>
+                </td>
+              </tr>
+              <% }) %>
 
-      <tr class="fw-bold table-dark">
-        <td colspan="6" class="text-end">Grand Total</td>
-        <td class="text-end"><%= fmt(grandDebit) %></td>
-        <td class="text-end"><%= fmt(grandCredit) %></td>
-      </tr>
-    </tbody>
-  </table>
-  </div>
+                <tr class="fw-bold table-dark">
+                  <td colspan="6" class="text-end">Grand Total</td>
+                  <td class="text-end">
+                    <%= fmt(grandDebit) %>
+                  </td>
+                  <td class="text-end">
+                    <%= fmt(grandCredit) %>
+                  </td>
+                </tr>
+          </tbody>
+        </table>
+      </div>
 
-  <% } %>
+      <% } %>
 
-  <script>
-    const parts = "<%= selectedDate %>".split('-');
-    const parsedDate = new Date(parts[0], parts[1] - 1, parts[2]);
+        <script>
+          const parts = "<%= selectedDate %>".split('-');
+          const parsedDate = new Date(parts[0], parts[1] - 1, parts[2]);
 
-    flatpickr("#dateInput", {
-      dateFormat: "d-m-Y",
-      allowInput: true,
-      defaultDate: parsedDate,
-      onChange: function(selectedDates) {
-        if (!selectedDates[0]) return;
-        const d    = selectedDates[0];
-        const yyyy = d.getFullYear();
-        const mm   = String(d.getMonth() + 1).padStart(2, '0');
-        const dd   = String(d.getDate()).padStart(2, '0');
-        window.location.href = `/daily-posting?date=${yyyy}-${mm}-${dd}`;
-      }
-    });
-  </script>
+          const postingParts = "<%= postingDate %>".split('-');
+          const parsedPosting = new Date(postingParts[0], postingParts[1] - 1, postingParts[2]);
+
+          // Entry Date picker
+          flatpickr("#dateInput", {
+            dateFormat: "d-m-Y",
+            allowInput: true,
+            defaultDate: parsedDate,
+            onChange: function (selectedDates) {
+              if (!selectedDates[0]) return;
+              const d = selectedDates[0];
+              const yyyy = d.getFullYear();
+              const mm = String(d.getMonth() + 1).padStart(2, '0');
+              const dd = String(d.getDate()).padStart(2, '0');
+              const posting = "<%= postingDate %>";
+              window.location.href = `/daily-posting?date=${yyyy}-${mm}-${dd}&posting=${posting}`;
+            }
+          });
+
+          // Posting Date picker
+          flatpickr("#postingDateInput", {
+            dateFormat: "d-m-Y",
+            allowInput: true,
+            defaultDate: parsedPosting,
+            onChange: function (selectedDates) {
+              if (!selectedDates[0]) return;
+              const d = selectedDates[0];
+              const yyyy = d.getFullYear();
+              const mm = String(d.getMonth() + 1).padStart(2, '0');
+              const dd = String(d.getDate()).padStart(2, '0');
+              const entryDate = "<%= selectedDate %>";
+              window.location.href = `/daily-posting?date=${entryDate}&posting=${yyyy}-${mm}-${dd}`;
+            }
+          });
+        </script>
 
 </body>
+
 </html>
