@@ -827,21 +827,18 @@ app.get('/gl/add-transaction', isAuthenticated, async (req, res) => {
     accNames.forEach(a => { nameMap[a.account_code] = a.name; });
 
     editData = {
-      voucher_no,
-      date: dateStr,
-      serial_no: partyRow.serial_no,
-      // party
-      account_code: partyCode,
-      account_name: partyAcc?.name || partyCode,   // ✅ NEW
-      // cash
-      cash_account: cashCode,
-      cash_account_name: cashAcc?.name || cashCode,    // ✅ NEW
-      // rest
-      description: partyRow.description,
-      reference: partyRow.reference,
-      invoice: partyRow.invoice,
-      amount
-    };
+  voucher_no,
+  date: dateStr,
+  serial_no: partyRow.serial_no,
+  account_code: partyCode,
+  account_name: nameMap[partyCode] || partyCode,        // ✅ fix
+  cash_account: cashCode,
+  cash_account_name: nameMap[cashCode] || cashCode,     // ✅ fix
+  description: partyRow.description,
+  reference: partyRow.reference,
+  invoice: partyRow.invoice,
+  amount
+};
   }
 
   res.render("gl/add-transaction", {
