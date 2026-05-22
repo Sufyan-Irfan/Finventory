@@ -1537,32 +1537,55 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
   const eDate = parseDMY(end_date);
 
   try {
-    // Opening balance
+    // ✅ Shahid company: cash group ke saare accounts
+    let cashCodes = [CASH];
+
+    if (company_code === 'Shahid') {
+      // Cash account ka group_id nikalo
+      const [[cashAcc]] = await db.query(
+        `SELECT group_id FROM accounts WHERE account_code = ? AND company_code = ?`,
+        [CASH, company_code]
+      );
+
+      if (cashAcc?.group_id) {
+        const [groupAccounts] = await db.query(
+          `SELECT account_code FROM accounts WHERE group_id = ? AND company_code = ?`,
+          [cashAcc.group_id, company_code]
+        );
+        cashCodes = groupAccounts.map(a => a.account_code);
+      }
+    }
+
+    // Opening balance — saare cash codes ka combined
     const [[{ opening }]] = await db.query(`
       SELECT IFNULL(SUM(debit - credit), 0) AS opening
       FROM transactions
-      WHERE account_code = ?
+      WHERE account_code IN (?)
         AND DATE(date) < ?
         AND company_code = ?
-    `, [CASH, sDate, company_code]);
+    `, [cashCodes, sDate, company_code]);
 
-    // ✅ Subquery hata di — simple flat query
+    // Transactions — account name bhi lao (Shahid ke liye useful)
     const [rows] = await db.query(`
       SELECT
         DATE_FORMAT(c.date, '%d-%m-%Y') AS date,
         c.voucher_no,
+        c.account_code,
+        a.name AS account_name,
         c.description,
         c.reference,
         c.debit,
         c.credit
       FROM transactions c
-      WHERE c.account_code = ?
+      LEFT JOIN accounts a ON a.account_code = c.account_code
+                           AND a.company_code = c.company_code
+      WHERE c.account_code IN (?)
         AND c.company_code = ?
         AND DATE(c.date) BETWEEN ? AND ?
       ORDER BY c.date, c.id
-    `, [CASH, company_code, sDate, eDate]);
+    `, [cashCodes, company_code, sDate, eDate]);
 
-    // ✅ Running balance JS mein
+    // Running balance
     let runningBalance = Number(opening || 0);
     const rowsWithBalance = rows.map(r => {
       runningBalance += Number(r.debit || 0) - Number(r.credit || 0);
@@ -1570,9 +1593,11 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
     });
 
     const totals = {
-      debit: rows.reduce((s, r) => s + Number(r.debit || 0), 0),
+      debit:  rows.reduce((s, r) => s + Number(r.debit  || 0), 0),
       credit: rows.reduce((s, r) => s + Number(r.credit || 0), 0)
     };
+
+    const isShahid = company_code === 'Shahid';
 
     res.render('cash-book-result', {
       rows: rowsWithBalance,
@@ -1582,7 +1607,8 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
       end_date,
       fmt,
       company_code,
-      cash_account: CASH
+      cash_account: CASH,
+      isShahid      // ✅ frontend ko pass karo
     });
 
   } catch (err) {
@@ -1591,7 +1617,8 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
       error: 'Error loading cash book',
       rows: [], totals: { debit: 0, credit: 0 },
       opening: 0, start_date, end_date, fmt,
-      company_code, cash_account: CASH || ''
+      company_code, cash_account: CASH || '',
+      isShahid: false
     });
   }
 });
