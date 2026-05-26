@@ -155,99 +155,100 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
   <script>
-    const data = <% - JSON.stringify({ rows, totals, opening, start_date, end_date, company_code, cash_account }) %>;
+  const data = <%- JSON.stringify({ rows, totals, opening, start_date, end_date, company_code, cash_account }) %>;
 
-    function fmtExport(n) {
-      return Number(n || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    }
+  function fmtExport(n) {
+    return Number(n || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
 
-    function accLabel(r) {
-      if (!r.account_code) return '-';
-      return r.account_name
-        ? r.account_code + ' - ' + r.account_name
-        : String(r.account_code);
-    }
+  // ✅ party_account use karo
+  function accLabel(r) {
+    return r.party_account || '-';
+  }
 
-    /* ================= PDF ================= */
-    function exportToPDF() {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF('l', 'pt', 'a4'); // landscape — more columns
+  /* ================= PDF ================= */
+  function exportToPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('l', 'pt', 'a4');
 
-      doc.setFontSize(12).setFont('helvetica', 'bold');
-      doc.text('Cash Book', 40, 30);
-      doc.setFontSize(10).setFont('helvetica', 'normal');
-      doc.text(data.company_code, doc.internal.pageSize.getWidth() - 40, 30, { align: 'right' });
-      doc.text(`Period: ${data.start_date} - ${data.end_date}`, 40, 50);
-      doc.text(`Cash Account: ${data.cash_account}`, 40, 65);
+    doc.setFontSize(12).setFont('helvetica', 'bold');
+    doc.text('Cash Book', 40, 30);
+    doc.setFontSize(10).setFont('helvetica', 'normal');
+    doc.text(data.company_code, doc.internal.pageSize.getWidth() - 40, 30, { align: 'right' });
+    doc.text(`Period: ${data.start_date} - ${data.end_date}`, 40, 50);
+    doc.text(`Cash Account: ${data.cash_account}`, 40, 65);
 
-      const body = [];
-      body.push(['', '', '', 'Opening Balance', '', '', '', fmtExport(data.opening)]);
+    const body = [];
+    body.push(['', '', '', 'Opening Balance', '', '', '', fmtExport(data.opening)]);
 
-      data.rows.forEach(r => {
-        body.push([
-          r.date || '',
-          r.voucher_no || '',
-          accLabel(r),
-          r.description || '',
-          r.reference || '',
-          r.debit ? fmtExport(r.debit) : '',
-          r.credit ? fmtExport(r.credit) : '',
-          fmtExport(r.balance)
-        ]);
-      });
+    data.rows.forEach(r => {
+      body.push([
+        r.date        || '',
+        r.voucher_no  || '',
+        accLabel(r),
+        r.description || '',
+        r.reference   || '',
+        r.debit  ? fmtExport(r.debit)  : '',
+        r.credit ? fmtExport(r.credit) : '',
+        fmtExport(r.balance)
+      ]);
+    });
 
-      const closingBal = Number(data.opening) + Number(data.totals.debit) - Number(data.totals.credit);
-      body.push(['', '', '', 'Totals', '', fmtExport(data.totals.debit), fmtExport(data.totals.credit), fmtExport(closingBal)]);
+    const closingBal = Number(data.opening) + Number(data.totals.debit) - Number(data.totals.credit);
+    body.push(['', '', '', 'Totals', '', fmtExport(data.totals.debit), fmtExport(data.totals.credit), fmtExport(closingBal)]);
 
-      doc.autoTable({
-        head: [['Date', 'Voucher', 'Account', 'Narration', 'Reference', 'Debit', 'Credit', 'Balance']],
-        body,
-        startY: 80,
-        styles: { fontSize: 8, overflow: 'ellipsize' },
-        theme: 'grid',
-        columnStyles: {
-          2: { cellWidth: 100 },
-          5: { halign: 'right' },
-          6: { halign: 'right' },
-          7: { halign: 'right' }
-        }
-      });
+    doc.autoTable({
+      head: [['Date', 'Voucher', 'Account', 'Narration', 'Reference', 'Debit', 'Credit', 'Balance']],
+      body,
+      startY: 80,
+      styles:       { fontSize: 8, overflow: 'ellipsize' },
+      theme:        'grid',
+      columnStyles: {
+        2: { cellWidth: 120 },
+        5: { halign: 'right' },
+        6: { halign: 'right' },
+        7: { halign: 'right' }
+      }
+    });
 
-      window.open(doc.output('bloburl'), '_blank');
-    }
+    // ✅ bloburl ki jagah blob use karo — Railway pe window.open issue fix
+    const blob = doc.output('blob');
+    const url  = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  }
 
-    /* ================= EXCEL ================= */
-    function exportToExcel() {
-      const sheetData = [];
-      sheetData.push(['Cash Book']);
-      sheetData.push([`Company: ${data.company_code}`]);
-      sheetData.push([`Period: ${data.start_date} - ${data.end_date}`]);
-      sheetData.push([]);
-      sheetData.push(['Date', 'Voucher No', 'Account', 'Narration', 'Reference', 'Debit', 'Credit', 'Balance']);
-      sheetData.push(['', '', '', 'Opening Balance', '', '', '', fmtExport(data.opening)]);
+  /* ================= EXCEL ================= */
+  function exportToExcel() {
+    const sheetData = [];
+    sheetData.push(['Cash Book']);
+    sheetData.push([`Company: ${data.company_code}`]);
+    sheetData.push([`Period: ${data.start_date} - ${data.end_date}`]);
+    sheetData.push([]);
+    sheetData.push(['Date', 'Voucher No', 'Account', 'Narration', 'Reference', 'Debit', 'Credit', 'Balance']);
+    sheetData.push(['', '', '', 'Opening Balance', '', '', '', fmtExport(data.opening)]);
 
-      data.rows.forEach(r => {
-        sheetData.push([
-          r.date || '',
-          r.voucher_no || '',
-          accLabel(r),
-          r.description || '',
-          r.reference || '',
-          r.debit ? fmtExport(r.debit) : '',
-          r.credit ? fmtExport(r.credit) : '',
-          fmtExport(r.balance)
-        ]);
-      });
+    data.rows.forEach(r => {
+      sheetData.push([
+        r.date        || '',
+        r.voucher_no  || '',
+        accLabel(r),
+        r.description || '',
+        r.reference   || '',
+        r.debit  ? fmtExport(r.debit)  : '',
+        r.credit ? fmtExport(r.credit) : '',
+        fmtExport(r.balance)
+      ]);
+    });
 
-      const closingBal = Number(data.opening) + Number(data.totals.debit) - Number(data.totals.credit);
-      sheetData.push(['', '', '', 'Totals', '', fmtExport(data.totals.debit), fmtExport(data.totals.credit), fmtExport(closingBal)]);
+    const closingBal = Number(data.opening) + Number(data.totals.debit) - Number(data.totals.credit);
+    sheetData.push(['', '', '', 'Totals', '', fmtExport(data.totals.debit), fmtExport(data.totals.credit), fmtExport(closingBal)]);
 
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(sheetData);
-      XLSX.utils.book_append_sheet(wb, ws, 'Cash Book');
-      XLSX.writeFile(wb, `Cash_Book_${data.start_date}_to_${data.end_date}.xlsx`);
-    }
-  </script>
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Cash Book');
+    XLSX.writeFile(wb, `Cash_Book_${data.start_date}_to_${data.end_date}.xlsx`);
+  }
+</script>
 </body>
 
 </html>
