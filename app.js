@@ -307,6 +307,7 @@ app.post('/setup/settings', isAuthenticated, async (req, res) => {
 });
 
 app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
+  let conn;
   try {
     const filePath = req.file.path;
     const companyCode = req.session.user.company_code;
@@ -324,190 +325,171 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
       "SELECT cash_account_code FROM company_settings WHERE company_code = ?",
       [companyCode]
     );
-
     const CASH = settings?.cash_account_code;
     if (!CASH) throw new Error("Cash account not set in company settings");
 
-    const conn = await db.getConnection();
+    conn = await db.getConnection();
     await conn.beginTransaction();
 
-    for (const row of rows) {
+    /* ================= ACCOUNT IMPORT ================= */
+    if (importType === "account") {
 
-      /* ================= ACCOUNT IMPORT ================= */
-      if (importType === "account") {
+      // ✅ Saare groups ek baar load karo
+      const [allGroups] = await conn.query(
+        "SELECT id, group_code FROM `groups` WHERE company_code = ?",
+        [companyCode]
+      );
+      const groupMap = {};
+      allGroups.forEach(g => { groupMap[g.group_code] = g.id; });
 
+      // ✅ Batch insert values
+      const insertValues = [];
+
+      for (const row of rows) {
         const code_raw = row.code || row.account_code || row.Code;
-
-        if (!code_raw) {
-          console.log("Missing code field:", row);
-          skippedCount++;
-          continue;
-        }
+        if (!code_raw) { skippedCount++; continue; }
 
         const full_code = String(code_raw).trim();
-
-        if (full_code.length < 5) {
-          console.log("Code too short:", full_code);
-          skippedCount++;
-          continue;
-        }
-
-        if (!/^\d+$/.test(full_code)) {
-          console.log("Invalid code (non-numeric):", full_code);
-          skippedCount++;
-          continue;
-        }
+        if (full_code.length < 5 || !/^\d+$/.test(full_code)) { skippedCount++; continue; }
 
         const group_code = full_code.slice(0, 4);
+        const group_id = groupMap[group_code];
+        if (!group_id) { skippedCount++; continue; }
 
-        const [[group]] = await conn.query(
-          "SELECT id FROM `groups` WHERE group_code=? AND company_code=?",
-          [group_code, companyCode]
-        );
-
-        if (!group) {
-          console.log("Group NOT FOUND:", group_code);
-          skippedCount++;
-          continue;
-        }
-
-        const account_code = full_code;
-        const name = (row.name || row.Name || "").toString().trim() || account_code;
+        const name = (row.name || row.Name || "").toString().trim() || full_code;
         const opening_balance = Number(row.opening_balance || row.Opening_Balance || 0);
 
-        try {
-          await conn.query(`
-            INSERT INTO accounts
-            (group_id, account_code, name, opening_balance, company_code)
-            VALUES (?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-              name = VALUES(name),
-              opening_balance = VALUES(opening_balance),
-              group_id = VALUES(group_id)
-          `, [group.id, account_code, name, opening_balance, companyCode]);
-          accountCount++;
-        } catch (err) {
-          console.log("Insert Error:", err.message);
-          skippedCount++;
+        insertValues.push([group_id, full_code, name, opening_balance, companyCode]);
+        accountCount++;
+      }
+
+      // ✅ Single batch insert
+      if (insertValues.length > 0) {
+        await conn.query(`
+          INSERT INTO accounts (group_id, account_code, name, opening_balance, company_code)
+          VALUES ?
+          ON DUPLICATE KEY UPDATE
+            name = VALUES(name),
+            opening_balance = VALUES(opening_balance),
+            group_id = VALUES(group_id)
+        `, [insertValues]);
+      }
+    }
+
+    /* ================= TRANSACTION IMPORT ================= */
+    if (importType === "transaction") {
+
+      // ✅ Saare groups aur accounts ek baar load karo
+      const [allGroups] = await conn.query(
+        "SELECT id, group_code FROM `groups` WHERE company_code = ?",
+        [companyCode]
+      );
+      const groupMap = {};
+      allGroups.forEach(g => { groupMap[g.group_code] = g.id; });
+
+      const [allAccounts] = await conn.query(
+        "SELECT id, account_code FROM accounts WHERE company_code = ?",
+        [companyCode]
+      );
+      const accountSet = new Set(allAccounts.map(a => String(a.account_code).trim()));
+
+      // ✅ Auto-create missing accounts — batch mein
+      const autoCreateMap = {}; // code -> group_id
+      const txnRows = rows.filter(r => r.account_code && r.voucher_no);
+
+      for (const row of txnRows) {
+        const ac = String(row.account_code).trim();
+        if (!accountSet.has(ac)) {
+          const gc = ac.slice(0, 4);
+          if (groupMap[gc]) autoCreateMap[ac] = groupMap[gc];
+        }
+        const cc = row.cash_code ? String(row.cash_code).trim() : null;
+        if (cc && !accountSet.has(cc)) {
+          const gc = cc.slice(0, 4);
+          if (groupMap[gc]) autoCreateMap[cc] = groupMap[gc];
         }
       }
 
-      /* ================= TRANSACTION IMPORT ================= */
-      if (importType === "transaction" && row.account_code && row.voucher_no) {
+      // Batch auto-create
+      if (Object.keys(autoCreateMap).length > 0) {
+        const autoVals = Object.entries(autoCreateMap).map(([code, gid]) => [gid, code, code, 0, companyCode]);
+        await conn.query(`
+          INSERT INTO accounts (group_id, account_code, name, opening_balance, company_code)
+          VALUES ?
+          ON DUPLICATE KEY UPDATE account_code = account_code
+        `, [autoVals]);
+        Object.keys(autoCreateMap).forEach(c => accountSet.add(c));
+      }
+
+      // ✅ Batch transaction insert
+      const partyInserts = [];
+      const cashInserts = [];
+
+      function parseDDMMYYYY(val) {
+        if (!val) return null;
+        if (typeof val === "number") {
+          const d = xlsx.SSF.parse_date_code(val);
+          if (!d) return null;
+          return `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`;
+        }
+        if (typeof val === "string" && val.includes("/")) {
+          const [dd, mm, yy] = val.split("/");
+          if (!dd || !mm || !yy) return null;
+          let year = yy.length === 2 ? (Number(yy) > 50 ? "19" + yy : "20" + yy) : yy;
+          return `${year}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+        }
+        if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+        return null;
+      }
+
+      for (const row of txnRows) {
+        const trxDate = parseDDMMYYYY(row.date);
+        if (!trxDate) { skippedCount++; continue; }
 
         const entry_type = (row.type || "CB").toString().trim();
-
-        const voucher_type_raw = (row.voucher_type || "").toString().trim().toUpperCase().replace(/\s+/g, '');
-        const voucher_type = ["RV", "PV"].includes(voucher_type_raw) ? voucher_type_raw : "RV";
-
-        function parseDDMMYYYY(val) {
-          if (!val) return null;
-          if (typeof val === "number") {
-            const d = xlsx.SSF.parse_date_code(val);
-            if (!d) return null;
-            return `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`;
-          }
-          if (typeof val === "string" && val.includes("/")) {
-            const [dd, mm, yy] = val.split("/");
-            if (!dd || !mm || !yy) return null;
-            let year = yy;
-            if (yy.length === 2) year = Number(yy) > 50 ? "19" + yy : "20" + yy;
-            return `${year}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
-          }
-          if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
-          return null;
-        }
-
-        const trxDate = parseDDMMYYYY(row.date);
-        if (!trxDate) {
-          console.log("Invalid date:", row.date);
-          skippedCount++;
-          continue;
-        }
-
+        const vt_raw = (row.voucher_type || "").toString().trim().toUpperCase().replace(/\s+/g, '');
+        const voucher_type = ["RV", "PV"].includes(vt_raw) ? vt_raw : "RV";
         const voucher_no = row.voucher_no.toString().trim();
         const serial_no = row.serial_no ? parseInt(row.serial_no) : 1;
         const account_code = row.account_code.toString().trim();
-
-        // 🔥 Account check — nahi mila to auto create
-        let [[accExists]] = await conn.query(
-          "SELECT id FROM accounts WHERE account_code=? AND company_code=?",
-          [account_code, companyCode]
-        );
-
-        if (!accExists) {
-          // Auto create — group pehle 4 digits se
-          const auto_group_code = account_code.slice(0, 4);
-          const [[autoGroup]] = await conn.query(
-            "SELECT id FROM `groups` WHERE group_code=? AND company_code=?",
-            [auto_group_code, companyCode]
-          );
-
-          if (autoGroup) {
-            await conn.query(`
-              INSERT INTO accounts (group_id, account_code, name, opening_balance, company_code)
-              VALUES (?, ?, ?, 0, ?)
-              ON DUPLICATE KEY UPDATE account_code = account_code
-            `, [autoGroup.id, account_code, account_code, companyCode]);
-            console.log("✅ Auto created account:", account_code);
-
-            // Naya insert hua — refetch karo
-            [[accExists]] = await conn.query(
-              "SELECT id FROM accounts WHERE account_code=? AND company_code=?",
-              [account_code, companyCode]
-            );
-          } else {
-            console.log("❌ Group not found for auto-create:", account_code);
-            skippedCount++;
-            continue;
-          }
-        }
-
         const debit = Number(row.debit || 0);
         const credit = Number(row.credit || 0);
-
         const description = row.description || null;
         const reference = row.reference || null;
         const invoice = row.invoice || null;
 
-        // 🔥 Cash code — validate karo, fallback CASH
+        if (!accountSet.has(account_code)) { skippedCount++; continue; }
+
         let cashCode = row.cash_code ? row.cash_code.toString().trim() : CASH;
+        if (!accountSet.has(cashCode)) cashCode = CASH;
 
-        const [[cashExists]] = await conn.query(
-          "SELECT id FROM accounts WHERE account_code=? AND company_code=?",
-          [cashCode, companyCode]
-        );
-
-        if (!cashExists) {
-          console.log(`Cash code ${cashCode} not found, using default: ${CASH}`);
-          cashCode = CASH;
-        }
-
-        if (!cashCode) {
-          console.log("Cash account missing, skipping");
-          skippedCount++;
-          continue;
-        }
-
-        // PARTY ENTRY
-        await conn.query(`
-          INSERT INTO transactions
-          (entry_type, voucher_type, date, voucher_no, serial_no,
-           account_code, debit, credit, description, reference, invoice, company_code)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [entry_type, voucher_type, trxDate, voucher_no, serial_no,
+        partyInserts.push([entry_type, voucher_type, trxDate, voucher_no, serial_no,
           account_code, debit, credit, description, reference, invoice, companyCode]);
 
-        // CASH ENTRY
-        await conn.query(`
-          INSERT INTO transactions
-          (entry_type, voucher_type, date, voucher_no, serial_no,
-           account_code, debit, credit, description, reference, invoice, company_code)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [entry_type, voucher_type, trxDate, voucher_no, serial_no,
+        cashInserts.push([entry_type, voucher_type, trxDate, voucher_no, serial_no,
           cashCode, credit, debit, description, reference, invoice, companyCode]);
 
         txnCount += 2;
+      }
+
+      // ✅ Single batch insert for all transactions
+      const BATCH = 500; // 500 rows at a time
+
+      for (let i = 0; i < partyInserts.length; i += BATCH) {
+        const pSlice = partyInserts.slice(i, i + BATCH);
+        const cSlice = cashInserts.slice(i, i + BATCH);
+        await conn.query(`
+          INSERT INTO transactions
+          (entry_type, voucher_type, date, voucher_no, serial_no,
+           account_code, debit, credit, description, reference, invoice, company_code)
+          VALUES ?
+        `, [pSlice]);
+        await conn.query(`
+          INSERT INTO transactions
+          (entry_type, voucher_type, date, voucher_no, serial_no,
+           account_code, debit, credit, description, reference, invoice, company_code)
+          VALUES ?
+        `, [cSlice]);
       }
     }
 
@@ -516,8 +498,7 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
     fs.unlinkSync(filePath);
 
     const [settingsData] = await db.query(
-      'SELECT * FROM company_settings WHERE company_code = ?',
-      [companyCode]
+      'SELECT * FROM company_settings WHERE company_code = ?', [companyCode]
     );
 
     const total = accountCount + txnCount;
@@ -538,21 +519,17 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
 
   } catch (err) {
     console.error("IMPORT ERROR:", err);
-
-    // 🔥 conn release karo agar open hai
     try { if (conn) { await conn.rollback(); conn.release(); } } catch (e) { }
+    try { if (req.file?.path) fs.unlinkSync(req.file.path); } catch (e) { }
 
     const [settingsData] = await db.query(
       'SELECT * FROM company_settings WHERE company_code = ?',
-      [companyCode]   // ← ye upper scope se aana chahiye
+      [req.session.user.company_code]
     ).catch(() => [[]]);
 
     return res.render('setup/settings', {
       settings: settingsData[0] || {},
-      messages: {
-        success: [],
-        error: [`❌ Import failed: ${err.message}`]
-      }
+      messages: { success: [], error: [`❌ Import failed: ${err.message}`] }
     });
   }
 });
@@ -827,18 +804,18 @@ app.get('/gl/add-transaction', isAuthenticated, async (req, res) => {
     accNames.forEach(a => { nameMap[a.account_code] = a.name; });
 
     editData = {
-  voucher_no,
-  date: dateStr,
-  serial_no: partyRow.serial_no,
-  account_code: partyCode,
-  account_name: nameMap[partyCode] || partyCode,        // ✅ fix
-  cash_account: cashCode,
-  cash_account_name: nameMap[cashCode] || cashCode,     // ✅ fix
-  description: partyRow.description,
-  reference: partyRow.reference,
-  invoice: partyRow.invoice,
-  amount
-};
+      voucher_no,
+      date: dateStr,
+      serial_no: partyRow.serial_no,
+      account_code: partyCode,
+      account_name: nameMap[partyCode] || partyCode,        // ✅ fix
+      cash_account: cashCode,
+      cash_account_name: nameMap[cashCode] || cashCode,     // ✅ fix
+      description: partyRow.description,
+      reference: partyRow.reference,
+      invoice: partyRow.invoice,
+      amount
+    };
   }
 
   res.render("gl/add-transaction", {
@@ -1136,7 +1113,7 @@ app.get('/daily-posting', isAuthenticated, async (req, res) => {
   const today = new Date().toISOString().split('T')[0];
 
   const selectedDate = req.query.date || today;
-  const dateType     = req.query.type || 'posting'; // 'posting' ya 'entry'
+  const dateType = req.query.type || 'posting'; // 'posting' ya 'entry'
 
   try {
     const [[settings]] = await db.query(
@@ -1188,35 +1165,35 @@ app.get('/daily-posting', isAuthenticated, async (req, res) => {
     const isCashCode = (code) => CASH_CODES.has(String(code).trim());
 
     Object.entries(voucherMap).forEach(([voucherNo, voucherLines]) => {
-      let cashLine    = voucherLines.find(l =>  isCashCode(l.account_code));
+      let cashLine = voucherLines.find(l => isCashCode(l.account_code));
       let accountLine = voucherLines.find(l => !isCashCode(l.account_code));
 
       if (!cashLine && voucherLines.length >= 2) {
         accountLine = voucherLines[0];
-        cashLine    = voucherLines[1];
+        cashLine = voucherLines[1];
       }
       if (!accountLine) accountLine = voucherLines[0];
 
-      const cashDebit  = Number(cashLine?.debit  || 0);
+      const cashDebit = Number(cashLine?.debit || 0);
       const cashCredit = Number(cashLine?.credit || 0);
 
       let debit = 0, credit = 0;
       if (cashLine) {
-        debit  = cashCredit > 0 ? cashCredit : 0;
-        credit = cashDebit  > 0 ? cashDebit  : 0;
+        debit = cashCredit > 0 ? cashCredit : 0;
+        credit = cashDebit > 0 ? cashDebit : 0;
       } else {
-        debit  = Number(accountLine.debit  || 0);
+        debit = Number(accountLine.debit || 0);
         credit = Number(accountLine.credit || 0);
       }
 
       entries.push({
-        voucher_no:     voucherNo,
+        voucher_no: voucherNo,
         formatted_date: accountLine.formatted_date,
-        description:    accountLine.description || '',
-        account_code:   accountLine.account_code,
-        account_name:   accountLine.account_name,
-        cash_code:      cashLine ? cashLine.account_code : '-',
-        cash_name:      cashLine ? (cashLine.account_name || cashLine.account_code) : '-',
+        description: accountLine.description || '',
+        account_code: accountLine.account_code,
+        account_name: accountLine.account_name,
+        cash_code: cashLine ? cashLine.account_code : '-',
+        cash_name: cashLine ? (cashLine.account_name || cashLine.account_code) : '-',
         debit,
         credit,
       });
@@ -1263,7 +1240,7 @@ app.post('/report-result', isAuthenticated, async (req, res) => {
   };
 
   const formattedStart = parseDMY(start_date);
-  const formattedEnd   = parseDMY(end_date);
+  const formattedEnd = parseDMY(end_date);
 
   // ✅ Shahid company ke liye against_account column show hoga
   const showAgainst = companyCode === 'Shahid';
@@ -1344,16 +1321,16 @@ app.post('/report-result', isAuthenticated, async (req, res) => {
     });
 
     const results = accountsList.map(acc => {
-      const key  = Number(acc.account_code);
+      const key = Number(acc.account_code);
       const prev = prevMap[key] || { debit: 0, credit: 0 };
       const opening_balance =
         Number(acc.opening_balance || 0) +
-        Number(prev.debit  || 0) -
+        Number(prev.debit || 0) -
         Number(prev.credit || 0);
 
       return {
         account_code: acc.account_code,
-        name:         acc.name,
+        name: acc.name,
         opening_balance,
         transactions: txnMap[key] || []
       };
@@ -1567,23 +1544,34 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
 
     // Transactions — account name bhi lao (Shahid ke liye useful)
     const [rows] = await db.query(`
-      SELECT
-        DATE_FORMAT(c.date, '%d-%m-%Y') AS date,
-        c.voucher_no,
-        c.account_code,
-        a.name AS account_name,
-        c.description,
-        c.reference,
-        c.debit,
-        c.credit
-      FROM transactions c
-      LEFT JOIN accounts a ON a.account_code = c.account_code
-                           AND a.company_code = c.company_code
-      WHERE c.account_code IN (?)
-        AND c.company_code = ?
-        AND DATE(c.date) BETWEEN ? AND ?
-      ORDER BY c.date, c.id
-    `, [cashCodes, company_code, sDate, eDate]);
+  SELECT
+    DATE_FORMAT(c.date, '%d-%m-%Y') AS date,
+    c.voucher_no,
+    c.account_code,
+    a.name AS account_name,
+    c.description,
+    c.reference,
+    c.debit,
+    c.credit,
+    -- ✅ Opposite (party) account
+    (
+      SELECT CONCAT(t2.account_code, ' - ', COALESCE(a2.name, t2.account_code))
+      FROM transactions t2
+      LEFT JOIN accounts a2 ON a2.account_code = t2.account_code
+                            AND a2.company_code = t2.company_code
+      WHERE t2.voucher_no  = c.voucher_no
+        AND t2.account_code NOT IN (?)
+        AND t2.company_code = c.company_code
+      LIMIT 1
+    ) AS party_account
+  FROM transactions c
+  LEFT JOIN accounts a ON a.account_code = c.account_code
+                       AND a.company_code = c.company_code
+  WHERE c.account_code IN (?)
+    AND c.company_code = ?
+    AND DATE(c.date) BETWEEN ? AND ?
+  ORDER BY c.date, c.id
+`, [cashCodes, cashCodes, company_code, sDate, eDate]);
 
     // Running balance
     let runningBalance = Number(opening || 0);
@@ -1593,7 +1581,7 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
     });
 
     const totals = {
-      debit:  rows.reduce((s, r) => s + Number(r.debit  || 0), 0),
+      debit: rows.reduce((s, r) => s + Number(r.debit || 0), 0),
       credit: rows.reduce((s, r) => s + Number(r.credit || 0), 0)
     };
 
