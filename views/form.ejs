@@ -1,0 +1,585 @@
+<%# views/invoices/form.ejs — no HTML wrapper, expressLayouts handles it %>
+<% const isEdit = !!inv; %>
+<% const d = inv || {}; %>
+
+<link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet">
+
+<% if (success && success.length) { %>
+  <div class="alert alert-success alert-dismissible fade show py-2">
+    <%- success %><button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+<% } %>
+<% if (error && error.length) { %>
+  <div class="alert alert-danger alert-dismissible fade show py-2">
+    <%- error %><button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+<% } %>
+
+<form action="/invoices/save" method="POST" id="invForm">
+  <input type="hidden" name="invoice_id" value="<%= d.id || '' %>">
+
+  <%# ─── TOP BAR ─── %>
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-2 px-3">
+      <div class="row g-2 align-items-end">
+
+        <%# Diff badge %>
+        <div class="col-auto">
+          <div class="small text-muted mb-1 fw-semibold">Invoice Diff</div>
+          <span id="diffBadge" class="badge bg-success fs-6 px-3 py-2">0</span>
+        </div>
+
+        <%# Bill No %>
+        <div class="col-md-2">
+          <label class="form-label mb-1 small fw-semibold">Bill No.</label>
+          <div class="input-group input-group-sm">
+            <input type="text" class="form-control" name="bill_no" id="bill_no"
+                   value="<%= d.bill_no || nextBillNo %>" required>
+            <% if (!isEdit) { %>
+              <button type="button" class="btn btn-outline-secondary"
+                      id="btnAutoNo" title="Next bill no.">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+            <% } %>
+          </div>
+        </div>
+
+        <%# Bill Date %>
+        <div class="col-md-2">
+          <label class="form-label mb-1 small fw-semibold">Bill Date</label>
+          <div class="input-group input-group-sm">
+            <input type="text" class="form-control" name="bill_date" id="bill_date_text"
+                   placeholder="dd-mm-yyyy"
+                   value="<%= d.bill_date || today %>" required>
+            <input type="date" id="bill_date_cal" class="form-control"
+                   style="max-width:38px;padding:2px 4px;" title="Pick from calendar">
+          </div>
+        </div>
+
+        <%# Vehicle %>
+        <div class="col-md-2">
+          <label class="form-label mb-1 small fw-semibold">Vehicle No.</label>
+          <input type="text" class="form-control form-control-sm"
+                 name="vehicle_no" placeholder="e.g. 4214"
+                 value="<%= d.vehicle_no || '' %>">
+        </div>
+
+        <%# Buttons %>
+        <div class="col-auto ms-auto d-flex gap-2 align-items-end">
+          <a href="/invoices" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-x-lg me-1"></i>Cancel
+          </a>
+          <button type="submit" class="btn btn-primary btn-sm px-4">
+            <i class="bi bi-save me-1"></i><%= isEdit ? 'Update Invoice' : 'Save Invoice' %>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <%# ─── SELLER + BUYER ─── %>
+  <div class="row g-3">
+
+    <%# ══════ SELLER ══════ %>
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100" style="border-top:3px solid #0d6efd;">
+        <div class="card-header bg-primary bg-opacity-10 py-2">
+          <h6 class="mb-0 text-primary">
+            <i class="bi bi-person-up me-1"></i>Seller Invoice
+          </h6>
+        </div>
+        <div class="card-body">
+
+          <%# Code + Name %>
+          <div class="row g-2 mb-2">
+            <div class="col-5">
+              <label class="form-label mb-1 small fw-semibold">Seller Code</label>
+              <input type="text" class="form-control form-control-sm"
+                     name="seller_code" id="seller_code"
+                     value="<%= d.seller_code || '' %>" placeholder="Account code">
+            </div>
+            <div class="col-7">
+              <label class="form-label mb-1 small fw-semibold">Name</label>
+              <input type="text" class="form-control form-control-sm bg-light"
+                     id="seller_name" readonly
+                     value="<%= sellerName || '' %>" placeholder="Auto from code">
+            </div>
+          </div>
+
+          <%# Balance %>
+          <div class="d-flex justify-content-between align-items-center
+                      bg-light border rounded px-3 py-2 mb-3 small">
+            <span class="text-muted">Balance</span>
+            <strong class="text-primary" id="seller_balance">
+              <%= fmt(sellerBal || 0) %>
+            </strong>
+          </div>
+
+          <%# Inv No + Serial %>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label mb-1 small fw-semibold">Inv No.</label>
+              <input type="number" class="form-control form-control-sm"
+                     name="seller_inv_no"
+                     value="<%= d.seller_inv_no || '' %>" placeholder="0">
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1 small fw-semibold">Serial No.</label>
+              <input type="number" class="form-control form-control-sm"
+                     name="seller_serial"
+                     value="<%= d.seller_serial || '' %>" placeholder="0">
+            </div>
+          </div>
+
+          <div class="border-top pt-2 mb-2 small text-muted fw-semibold">Quantity</div>
+
+          <%# Bags %>
+          <div class="mb-2">
+            <label class="form-label mb-1 small fw-semibold">
+              Bags
+              <a href="#" class="ms-1 text-secondary" style="font-size:11px;"
+                 id="bags_sync_btn" onclick="toggleSync('bags');return false;">sync ✓</a>
+            </label>
+            <input type="number" class="form-control form-control-sm"
+                   name="bags" id="seller_bags"
+                   value="<%= d.bags || '' %>" placeholder="0"
+                   oninput="onSellerChange('bags')">
+          </div>
+
+          <%# Seller Weight %>
+          <div class="mb-3">
+            <label class="form-label mb-1 small fw-semibold">
+              Weight
+              <a href="#" class="ms-1 text-secondary" style="font-size:11px;"
+                 id="weight_sync_btn" onclick="toggleSync('weight');return false;">sync ✓</a>
+            </label>
+            <input type="number" class="form-control form-control-sm"
+                   name="seller_weight" id="seller_weight"
+                   value="<%= d.seller_weight || '' %>" placeholder="0"
+                   oninput="onSellerChange('weight')">
+          </div>
+
+          <div class="border-top pt-2 mb-2 small text-muted fw-semibold">Rate & Amount</div>
+
+          <%# Rate %>
+          <div class="mb-2">
+            <label class="form-label mb-1 small fw-semibold">Seller Rate</label>
+            <input type="number" class="form-control form-control-sm"
+                   name="seller_rate" id="seller_rate"
+                   value="<%= d.seller_rate || '' %>" placeholder="0.0000" step="0.0001"
+                   oninput="calcAmt('seller')">
+          </div>
+
+          <%# Amount %>
+          <div class="mb-3">
+            <label class="form-label mb-1 small fw-semibold">
+              Amount
+              <a href="#" class="ms-1 text-secondary" style="font-size:11px;"
+                 id="sAmt_toggle" onclick="toggleAmt('seller');return false;">(auto)</a>
+            </label>
+            <input type="number" class="form-control form-control-sm"
+                   name="seller_amount" id="seller_amount"
+                   value="<%= d.seller_amount ? Math.round(d.seller_amount) : '' %>"
+                   placeholder="Auto (weight × rate)" oninput="calcNet()">
+          </div>
+
+          <div class="border-top pt-2 mb-2 small text-muted fw-semibold">Deductions</div>
+
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label class="form-label mb-1 small">Cartage</label>
+              <input type="number" class="form-control form-control-sm"
+                     name="seller_cartage" id="seller_cartage"
+                     value="<%= d.seller_cartage || '' %>" placeholder="0"
+                     oninput="calcNet()">
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1 small">Brokery</label>
+              <input type="number" class="form-control form-control-sm"
+                     name="seller_brokery" id="seller_brokery"
+                     value="<%= d.seller_brokery || '' %>" placeholder="0"
+                     oninput="calcNet()">
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label class="form-label mb-1 small">M/F</label>
+              <input type="number" class="form-control form-control-sm"
+                     name="seller_mf" id="seller_mf"
+                     value="<%= d.seller_mf || '' %>" placeholder="0"
+                     oninput="calcNet()">
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1 small">Phone</label>
+              <input type="number" class="form-control form-control-sm"
+                     name="seller_phone" id="seller_phone"
+                     value="<%= d.seller_phone || '' %>" placeholder="0"
+                     oninput="calcNet()">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label mb-1 small">Others (deduction)</label>
+            <input type="number" class="form-control form-control-sm"
+                   name="seller_other" id="seller_other"
+                   value="<%= d.seller_other || '' %>" placeholder="0"
+                   oninput="calcNet()">
+          </div>
+
+          <%# Seller Net %>
+          <div class="d-flex justify-content-between align-items-center
+                      rounded px-3 py-2"
+               style="background:#e7f1ff;border:1px solid #b6d4fe;">
+            <span class="fw-semibold text-primary">Net Amount</span>
+            <strong class="fs-5 text-primary" id="seller_net_display">
+              <%= fmt(d.seller_net || 0) %>
+            </strong>
+          </div>
+          <input type="hidden" name="seller_net" id="seller_net_val"
+                 value="<%= d.seller_net || 0 %>">
+
+        </div>
+      </div>
+    </div>
+
+    <%# ══════ BUYER ══════ %>
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100" style="border-top:3px solid #198754;">
+        <div class="card-header bg-success bg-opacity-10 py-2">
+          <h6 class="mb-0 text-success">
+            <i class="bi bi-person-down me-1"></i>Buyer Invoice
+          </h6>
+        </div>
+        <div class="card-body">
+
+          <%# Code + Name %>
+          <div class="row g-2 mb-2">
+            <div class="col-5">
+              <label class="form-label mb-1 small fw-semibold">Buyer Code</label>
+              <input type="text" class="form-control form-control-sm"
+                     name="buyer_code" id="buyer_code"
+                     value="<%= d.buyer_code || '' %>" placeholder="Account code">
+            </div>
+            <div class="col-7">
+              <label class="form-label mb-1 small fw-semibold">Name</label>
+              <input type="text" class="form-control form-control-sm bg-light"
+                     id="buyer_name" readonly
+                     value="<%= buyerName || '' %>" placeholder="Auto from code">
+            </div>
+          </div>
+
+          <%# Balance %>
+          <div class="d-flex justify-content-between align-items-center
+                      bg-light border rounded px-3 py-2 mb-3 small">
+            <span class="text-muted">Balance</span>
+            <strong class="text-success" id="buyer_balance">
+              <%= fmt(buyerBal || 0) %>
+            </strong>
+          </div>
+
+          <%# Inv No %>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label mb-1 small fw-semibold">Inv No.</label>
+              <input type="number" class="form-control form-control-sm"
+                     name="buyer_inv_no"
+                     value="<%= d.buyer_inv_no || '' %>" placeholder="0">
+            </div>
+            <div class="col-6"><%# spacer %></div>
+          </div>
+
+          <div class="border-top pt-2 mb-2 small text-muted fw-semibold">Quantity</div>
+
+          <%# Buyer Bags (synced) %>
+          <div class="mb-2">
+            <label class="form-label mb-1 small fw-semibold">
+              Bags
+              <span class="ms-1 text-muted" style="font-size:11px;"
+                    id="bags_buyer_lbl">(synced)</span>
+            </label>
+            <input type="number" class="form-control form-control-sm"
+                   id="buyer_bags"
+                   value="<%= d.bags || '' %>" placeholder="0"
+                   oninput="onBuyerChange('bags')">
+          </div>
+
+          <%# Buyer Weight %>
+          <div class="mb-3">
+            <label class="form-label mb-1 small fw-semibold">
+              Weight
+              <span class="ms-1 text-muted" style="font-size:11px;"
+                    id="weight_buyer_lbl">(synced)</span>
+            </label>
+            <input type="number" class="form-control form-control-sm"
+                   name="buyer_weight" id="buyer_weight"
+                   value="<%= d.buyer_weight || '' %>" placeholder="0"
+                   oninput="onBuyerChange('weight')">
+          </div>
+
+          <div class="border-top pt-2 mb-2 small text-muted fw-semibold">Rate & Amount</div>
+
+          <%# Buyer Rate %>
+          <div class="mb-2">
+            <label class="form-label mb-1 small fw-semibold">Buyer Rate</label>
+            <input type="number" class="form-control form-control-sm"
+                   name="buyer_rate" id="buyer_rate"
+                   value="<%= d.buyer_rate || '' %>" placeholder="0.0000" step="0.0001"
+                   oninput="calcAmt('buyer')">
+          </div>
+
+          <%# Buyer Amount %>
+          <div class="mb-3">
+            <label class="form-label mb-1 small fw-semibold">
+              Amount
+              <a href="#" class="ms-1 text-secondary" style="font-size:11px;"
+                 id="bAmt_toggle" onclick="toggleAmt('buyer');return false;">(auto)</a>
+            </label>
+            <input type="number" class="form-control form-control-sm"
+                   name="buyer_amount" id="buyer_amount"
+                   value="<%= d.buyer_amount ? Math.round(d.buyer_amount) : '' %>"
+                   placeholder="Auto (weight × rate)" oninput="calcNet()">
+          </div>
+
+          <div class="border-top pt-2 mb-2 small text-muted fw-semibold">Deductions</div>
+
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label class="form-label mb-1 small">Cartage</label>
+              <input type="number" class="form-control form-control-sm"
+                     name="buyer_cartage" id="buyer_cartage"
+                     value="<%= d.buyer_cartage || '' %>" placeholder="0"
+                     oninput="calcNet()">
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1 small">
+                Brokery
+                <small class="text-success fw-normal">(+ added)</small>
+              </label>
+              <input type="number" class="form-control form-control-sm"
+                     name="buyer_brokery" id="buyer_brokery"
+                     value="<%= d.buyer_brokery || '' %>" placeholder="0"
+                     oninput="calcNet()">
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label class="form-label mb-1 small">M/F</label>
+              <input type="number" class="form-control form-control-sm"
+                     name="buyer_mf" id="buyer_mf"
+                     value="<%= d.buyer_mf || '' %>" placeholder="0"
+                     oninput="calcNet()">
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1 small">Phone</label>
+              <input type="number" class="form-control form-control-sm"
+                     name="buyer_phone" id="buyer_phone"
+                     value="<%= d.buyer_phone || '' %>" placeholder="0"
+                     oninput="calcNet()">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label mb-1 small">Others (deduction)</label>
+            <input type="number" class="form-control form-control-sm"
+                   name="buyer_other" id="buyer_other"
+                   value="<%= d.buyer_other || '' %>" placeholder="0"
+                   oninput="calcNet()">
+          </div>
+
+          <%# Buyer Net %>
+          <div class="d-flex justify-content-between align-items-center
+                      rounded px-3 py-2"
+               style="background:#d1e7dd;border:1px solid #a3cfbb;">
+            <span class="fw-semibold text-success">Net Amount</span>
+            <strong class="fs-5 text-success" id="buyer_net_display">
+              <%= fmt(d.buyer_net || 0) %>
+            </strong>
+          </div>
+          <input type="hidden" name="buyer_net" id="buyer_net_val"
+                 value="<%= d.buyer_net || 0 %>">
+
+        </div>
+      </div>
+    </div>
+
+  </div><%# end row %>
+</form>
+
+<%# ─── CLIENT SCRIPT ─── %>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script>
+// ── state ─────────────────────────────────────────────────────────
+const syncOn    = { bags: true, weight: true };
+const amtManual = { seller: false, buyer: false };
+
+// ── DOM helpers ───────────────────────────────────────────────────
+const el  = id => document.getElementById(id);
+const num = id => parseFloat(el(id)?.value) || 0;
+const set = (id, v) => { if (el(id)) el(id).value = v; };
+
+function fmtJS(n) {
+  return Math.round(n).toLocaleString('en-PK');
+}
+
+// ── Date: text ↔ calendar ─────────────────────────────────────────
+const txtDate = el('bill_date_text');
+const calDate = el('bill_date_cal');
+
+// Pre-fill calendar on load
+(function() {
+  const t = txtDate.value;
+  if (/^\d{2}-\d{2}-\d{4}$/.test(t)) {
+    const [dd,mm,yyyy] = t.split('-');
+    calDate.value = `${yyyy}-${mm}-${dd}`;
+  }
+})();
+
+txtDate.addEventListener('input', function() {
+  if (/^\d{2}-\d{2}-\d{4}$/.test(this.value)) {
+    const [dd,mm,yyyy] = this.value.split('-');
+    calDate.value = `${yyyy}-${mm}-${dd}`;
+  }
+});
+calDate.addEventListener('change', function() {
+  if (!this.value) return;
+  const [y,m,d] = this.value.split('-');
+  txtDate.value = `${d}-${m}-${y}`;
+});
+
+flatpickr('#bill_date_text', {
+  dateFormat: 'd-m-Y',
+  allowInput: true,
+  defaultDate: txtDate.value || null,
+  onChange(sel) {
+    if (!sel.length) return;
+    const d  = sel[0];
+    const dd = String(d.getDate()).padStart(2,'0');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const yy = d.getFullYear();
+    txtDate.value = `${dd}-${mm}-${yy}`;
+    calDate.value = `${yy}-${mm}-${dd}`;
+  }
+});
+
+// ── Auto bill no ──────────────────────────────────────────────────
+const btnAuto = el('btnAutoNo');
+if (btnAuto) {
+  btnAuto.addEventListener('click', async () => {
+    try {
+      const r = await fetch('/invoices/api/next-bill-no');
+      const j = await r.json();
+      el('bill_no').value = j.next;
+    } catch(e) { console.error(e); }
+  });
+}
+
+// ── Party code lookup ─────────────────────────────────────────────
+const lookupTimer = {};
+function setupLookup(side) {
+  const codeEl = el(`${side}_code`);
+  if (!codeEl) return;
+  codeEl.addEventListener('input', function() {
+    clearTimeout(lookupTimer[side]);
+    const code = this.value.trim();
+    if (!code) {
+      el(`${side}_name`).value = '';
+      el(`${side}_balance`).textContent = '0.00';
+      return;
+    }
+    lookupTimer[side] = setTimeout(async () => {
+      try {
+        const r = await fetch(`/invoices/api/party/${encodeURIComponent(code)}`);
+        const j = await r.json();
+        if (j.found) {
+          el(`${side}_name`).value = j.name;
+          el(`${side}_balance`).textContent =
+            Number(j.balance).toLocaleString('en-PK', { minimumFractionDigits: 2 });
+        } else {
+          el(`${side}_name`).value = '';
+          el(`${side}_balance`).textContent = 'Not found';
+        }
+      } catch(e) { console.error(e); }
+    }, 500);
+  });
+}
+setupLookup('seller');
+setupLookup('buyer');
+
+// ── Sync: seller bags/weight → buyer ─────────────────────────────
+function toggleSync(field) {
+  syncOn[field] = !syncOn[field];
+  if (field === 'bags') {
+    el('bags_sync_btn').textContent  = syncOn.bags   ? 'sync ✓' : 'manual';
+    el('bags_buyer_lbl').textContent = syncOn.bags   ? '(synced)' : '(manual)';
+  } else {
+    el('weight_sync_btn').textContent  = syncOn.weight ? 'sync ✓' : 'manual';
+    el('weight_buyer_lbl').textContent = syncOn.weight ? '(synced)' : '(manual)';
+  }
+}
+
+function onSellerChange(field) {
+  if (field === 'bags'   && syncOn.bags)   el('buyer_bags').value   = el('seller_bags').value;
+  if (field === 'weight' && syncOn.weight) el('buyer_weight').value = el('seller_weight').value;
+  calcAmt('seller');
+  calcAmt('buyer');
+  calcNet();
+}
+
+// Buyer manually typed → turn off sync silently
+function onBuyerChange(field) {
+  syncOn[field] = false;
+  if (field === 'bags') {
+    el('bags_sync_btn').textContent  = 'manual';
+    el('bags_buyer_lbl').textContent = '(manual)';
+  } else {
+    el('weight_sync_btn').textContent  = 'manual';
+    el('weight_buyer_lbl').textContent = '(manual)';
+  }
+  calcAmt('buyer');
+  calcNet();
+}
+
+// ── Amount toggle ─────────────────────────────────────────────────
+function toggleAmt(side) {
+  amtManual[side] = !amtManual[side];
+  el(side === 'seller' ? 'sAmt_toggle' : 'bAmt_toggle').textContent
+    = amtManual[side] ? '(manual)' : '(auto)';
+  if (!amtManual[side]) calcAmt(side);
+}
+
+function calcAmt(side) {
+  if (amtManual[side]) return;
+  const w = side === 'seller' ? num('seller_weight') : num('buyer_weight');
+  const r = side === 'seller' ? num('seller_rate')   : num('buyer_rate');
+  if (w && r) set(side === 'seller' ? 'seller_amount' : 'buyer_amount', Math.round(w * r));
+  calcNet();
+}
+
+// ── Net amounts + diff ────────────────────────────────────────────
+function calcNet() {
+  const sAmt = num('seller_amount');
+  const sNet = sAmt
+    - num('seller_cartage') - num('seller_brokery')
+    - num('seller_mf')      - num('seller_phone') - num('seller_other');
+
+  const bAmt = num('buyer_amount');
+  const bNet = bAmt
+    - num('buyer_cartage')  + num('buyer_brokery')
+    - num('buyer_mf')       - num('buyer_phone')  - num('buyer_other');
+
+  const sR = Math.round(sNet);
+  const bR = Math.round(bNet);
+
+  el('seller_net_display').textContent = fmtJS(sR);
+  el('buyer_net_display').textContent  = fmtJS(bR);
+  set('seller_net_val', sR);
+  set('buyer_net_val',  bR);
+
+  const diff  = bR - sR;
+  const badge = el('diffBadge');
+  badge.textContent = fmtJS(diff);
+  badge.className   = `badge fs-6 px-3 py-2 ${diff === 0 ? 'bg-success' : 'bg-warning text-dark'}`;
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+calcNet();
+</script>

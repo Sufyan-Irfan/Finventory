@@ -379,119 +379,142 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
     /* ================= TRANSACTION IMPORT ================= */
     if (importType === "transaction") {
 
-      // ✅ Saare groups aur accounts ek baar load karo
-      const [allGroups] = await conn.query(
-        "SELECT id, group_code FROM `groups` WHERE company_code = ?",
-        [companyCode]
-      );
-      const groupMap = {};
-      allGroups.forEach(g => { groupMap[g.group_code] = g.id; });
+  // ✅ Groups aur accounts load karo
+  const [allGroups] = await conn.query(
+    "SELECT id, group_code FROM `groups` WHERE company_code = ?",
+    [companyCode]
+  );
+  const groupMap = {};
+  allGroups.forEach(g => { groupMap[g.group_code] = g.id; });
 
-      const [allAccounts] = await conn.query(
-        "SELECT id, account_code FROM accounts WHERE company_code = ?",
-        [companyCode]
-      );
-      const accountSet = new Set(allAccounts.map(a => String(a.account_code).trim()));
+  const [allAccounts] = await conn.query(
+    "SELECT id, account_code FROM accounts WHERE company_code = ?",
+    [companyCode]
+  );
+  const accountSet = new Set(allAccounts.map(a => String(a.account_code).trim()));
 
-      // ✅ Auto-create missing accounts — batch mein
-      const autoCreateMap = {}; // code -> group_id
-      const txnRows = rows.filter(r => r.account_code && r.voucher_no);
+  // ✅ Auto-create missing accounts
+  const autoCreateMap = {};
+  const txnRows = rows.filter(r => r.account_code && r.voucher_no);
 
-      for (const row of txnRows) {
-        const ac = String(row.account_code).trim();
-        if (!accountSet.has(ac)) {
-          const gc = ac.slice(0, 4);
-          if (groupMap[gc]) autoCreateMap[ac] = groupMap[gc];
-        }
-        const cc = row.cash_code ? String(row.cash_code).trim() : null;
-        if (cc && !accountSet.has(cc)) {
-          const gc = cc.slice(0, 4);
-          if (groupMap[gc]) autoCreateMap[cc] = groupMap[gc];
-        }
-      }
-
-      // Batch auto-create
-      if (Object.keys(autoCreateMap).length > 0) {
-        const autoVals = Object.entries(autoCreateMap).map(([code, gid]) => [gid, code, code, 0, companyCode]);
-        await conn.query(`
-          INSERT INTO accounts (group_id, account_code, name, opening_balance, company_code)
-          VALUES ?
-          ON DUPLICATE KEY UPDATE account_code = account_code
-        `, [autoVals]);
-        Object.keys(autoCreateMap).forEach(c => accountSet.add(c));
-      }
-
-      // ✅ Batch transaction insert
-      const partyInserts = [];
-      const cashInserts = [];
-
-      function parseDDMMYYYY(val) {
-        if (!val) return null;
-        if (typeof val === "number") {
-          const d = xlsx.SSF.parse_date_code(val);
-          if (!d) return null;
-          return `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`;
-        }
-        if (typeof val === "string" && val.includes("/")) {
-          const [dd, mm, yy] = val.split("/");
-          if (!dd || !mm || !yy) return null;
-          let year = yy.length === 2 ? (Number(yy) > 50 ? "19" + yy : "20" + yy) : yy;
-          return `${year}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
-        }
-        if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
-        return null;
-      }
-
-      for (const row of txnRows) {
-        const trxDate = parseDDMMYYYY(row.date);
-        if (!trxDate) { skippedCount++; continue; }
-
-        const entry_type = (row.type || "CB").toString().trim();
-        const vt_raw = (row.voucher_type || "").toString().trim().toUpperCase().replace(/\s+/g, '');
-        const voucher_type = ["RV", "PV"].includes(vt_raw) ? vt_raw : "RV";
-        const voucher_no = row.voucher_no.toString().trim();
-        const serial_no = row.serial_no ? parseInt(row.serial_no) : 1;
-        const account_code = row.account_code.toString().trim();
-        const debit = Number(row.debit || 0);
-        const credit = Number(row.credit || 0);
-        const description = row.description || null;
-        const reference = row.reference || null;
-        const invoice = row.invoice || null;
-
-        if (!accountSet.has(account_code)) { skippedCount++; continue; }
-
-        let cashCode = row.cash_code ? row.cash_code.toString().trim() : CASH;
-        if (!accountSet.has(cashCode)) cashCode = CASH;
-
-        partyInserts.push([entry_type, voucher_type, trxDate, voucher_no, serial_no,
-          account_code, debit, credit, description, reference, invoice, companyCode]);
-
-        cashInserts.push([entry_type, voucher_type, trxDate, voucher_no, serial_no,
-          cashCode, credit, debit, description, reference, invoice, companyCode]);
-
-        txnCount += 2;
-      }
-
-      // ✅ Single batch insert for all transactions
-      const BATCH = 500; // 500 rows at a time
-
-      for (let i = 0; i < partyInserts.length; i += BATCH) {
-        const pSlice = partyInserts.slice(i, i + BATCH);
-        const cSlice = cashInserts.slice(i, i + BATCH);
-        await conn.query(`
-          INSERT INTO transactions
-          (entry_type, voucher_type, date, voucher_no, serial_no,
-           account_code, debit, credit, description, reference, invoice, company_code)
-          VALUES ?
-        `, [pSlice]);
-        await conn.query(`
-          INSERT INTO transactions
-          (entry_type, voucher_type, date, voucher_no, serial_no,
-           account_code, debit, credit, description, reference, invoice, company_code)
-          VALUES ?
-        `, [cSlice]);
-      }
+  for (const row of txnRows) {
+    const ac = String(row.account_code).trim();
+    if (!accountSet.has(ac)) {
+      const gc = ac.slice(0, 4);
+      if (groupMap[gc]) autoCreateMap[ac] = groupMap[gc];
     }
+    const cc = row.cash_code ? String(row.cash_code).trim() : null;
+    if (cc && !accountSet.has(cc)) {
+      const gc = cc.slice(0, 4);
+      if (groupMap[gc]) autoCreateMap[cc] = groupMap[gc];
+    }
+  }
+
+  if (Object.keys(autoCreateMap).length > 0) {
+    const autoVals = Object.entries(autoCreateMap).map(([code, gid]) => [gid, code, code, 0, companyCode]);
+    await conn.query(`
+      INSERT INTO accounts (group_id, account_code, name, opening_balance, company_code)
+      VALUES ?
+      ON DUPLICATE KEY UPDATE account_code = account_code
+    `, [autoVals]);
+    Object.keys(autoCreateMap).forEach(c => accountSet.add(c));
+  }
+
+  // ✅ FIX: Import mein aane wale tamam voucher_no collect karo
+  const incomingVoucherNos = [...new Set(
+    txnRows
+      .map(r => r.voucher_no?.toString().trim())
+      .filter(Boolean)
+  )];
+
+  // ✅ FIX: Un voucher_nos ke existing transactions delete karo
+  // — yeh "overwrite" ka kaam karta hai
+  if (incomingVoucherNos.length > 0) {
+    // MySQL IN() ki limit ke liye 500 ka batch
+    const VBATCH = 500;
+    for (let i = 0; i < incomingVoucherNos.length; i += VBATCH) {
+      const slice = incomingVoucherNos.slice(i, i + VBATCH);
+      await conn.query(
+        `DELETE FROM transactions
+         WHERE company_code = ? AND voucher_no IN (?)`,
+        [companyCode, slice]
+      );
+    }
+  }
+
+  // ✅ Ab fresh insert karo
+  const partyInserts = [];
+  const cashInserts  = [];
+
+  function parseDDMMYYYY(val) {
+    if (!val) return null;
+    if (typeof val === "number") {
+      const d = xlsx.SSF.parse_date_code(val);
+      if (!d) return null;
+      return `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`;
+    }
+    if (typeof val === "string" && val.includes("/")) {
+      const [dd, mm, yy] = val.split("/");
+      if (!dd || !mm || !yy) return null;
+      const year = yy.length === 2 ? (Number(yy) > 50 ? "19" + yy : "20" + yy) : yy;
+      return `${year}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+    return null;
+  }
+
+  for (const row of txnRows) {
+    const trxDate = parseDDMMYYYY(row.date);
+    if (!trxDate) { skippedCount++; continue; }
+
+    const entry_type   = (row.type || "CB").toString().trim();
+    const vt_raw       = (row.voucher_type || "").toString().trim().toUpperCase().replace(/\s+/g, '');
+    const voucher_type = ["RV", "PV"].includes(vt_raw) ? vt_raw : "RV";
+    const voucher_no   = row.voucher_no.toString().trim();
+    const serial_no    = row.serial_no ? parseInt(row.serial_no) : 1;
+    const account_code = row.account_code.toString().trim();
+    const debit        = Number(row.debit  || 0);
+    const credit       = Number(row.credit || 0);
+    const description  = row.description || null;
+    const reference    = row.reference   || null;
+    const invoice      = row.invoice     || null;
+
+    if (!accountSet.has(account_code)) { skippedCount++; continue; }
+
+    let cashCode = row.cash_code ? row.cash_code.toString().trim() : CASH;
+    if (!accountSet.has(cashCode)) cashCode = CASH;
+
+    partyInserts.push([
+      entry_type, voucher_type, trxDate, voucher_no, serial_no,
+      account_code, debit, credit, description, reference, invoice, companyCode
+    ]);
+    cashInserts.push([
+      entry_type, voucher_type, trxDate, voucher_no, serial_no,
+      cashCode, credit, debit, description, reference, invoice, companyCode
+    ]);
+
+    txnCount += 2;
+  }
+
+  // ✅ Batch insert (500 at a time)
+  const BATCH = 500;
+  for (let i = 0; i < partyInserts.length; i += BATCH) {
+    const pSlice = partyInserts.slice(i, i + BATCH);
+    const cSlice = cashInserts.slice(i, i + BATCH);
+    await conn.query(`
+      INSERT INTO transactions
+        (entry_type, voucher_type, date, voucher_no, serial_no,
+         account_code, debit, credit, description, reference, invoice, company_code)
+      VALUES ?
+    `, [pSlice]);
+    await conn.query(`
+      INSERT INTO transactions
+        (entry_type, voucher_type, date, voucher_no, serial_no,
+         account_code, debit, credit, description, reference, invoice, company_code)
+      VALUES ?
+    `, [cSlice]);
+  }
+}
 
     await conn.commit();
     conn.release();
@@ -1684,6 +1707,271 @@ app.post('/gl/delete-voucher/:voucher_no', isAuthenticated, async (req, res) => 
 
   req.flash('success', 'Voucher deleted');
   res.redirect('/search?query=&message=Deleted');
+});
+
+// ================================================================
+//  INVOICES MODULE — app.js mein paste karo app.listen() se pehle
+// ================================================================
+
+// ── helpers ──────────────────────────────────────────────────────
+function toDBDate(d) {
+  if (!d) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  const [dd, mm, yyyy] = d.split('-');
+  return `${yyyy}-${mm}-${dd}`;
+}
+function toDisplayDate(d) {
+  if (!d) return '';
+  const s = d instanceof Date
+    ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    : String(d).slice(0, 10);
+  const [y, m, dd] = s.split('-');
+  return `${dd}-${m}-${y}`;
+}
+const nv = v => parseFloat(v) || 0;
+
+// ── GET /invoices — list ──────────────────────────────────────────
+app.get('/invoices', isAuthenticated, async (req, res) => {
+  const cc = req.session.user.company_code;
+  try {
+    const [invoices] = await db.query(`
+      SELECT id, bill_no,
+             DATE_FORMAT(bill_date,'%d-%m-%Y') AS bill_date,
+             vehicle_no, seller_code, buyer_code,
+             bags, seller_weight, buyer_weight,
+             seller_rate, buyer_rate,
+             seller_net, buyer_net, diff
+      FROM invoices
+      WHERE company_code = ?
+      ORDER BY bill_date DESC, CAST(bill_no AS UNSIGNED) DESC
+      LIMIT 300
+    `, [cc]);
+
+    res.render('invoices/list', { invoices, fmt });
+  } catch (err) {
+    console.error('Invoices list error:', err);
+    req.flash('error', 'Could not load invoices');
+    res.redirect('/dashboard');
+  }
+});
+
+// ── GET /invoices/add ─────────────────────────────────────────────
+app.get('/invoices/add', isAuthenticated, async (req, res) => {
+  const cc = req.session.user.company_code;
+  try {
+    const [[last]] = await db.query(
+      `SELECT bill_no FROM invoices
+       WHERE company_code = ?
+       ORDER BY CAST(bill_no AS UNSIGNED) DESC LIMIT 1`,
+      [cc]
+    );
+    const nextBillNo = last ? (parseInt(last.bill_no) + 1) : 1;
+
+    const now = new Date();
+    const today = `${String(now.getDate()).padStart(2,'0')}-${String(now.getMonth()+1).padStart(2,'0')}-${now.getFullYear()}`;
+
+    res.render('invoices/form', {
+      inv: null, nextBillNo, today,
+      sellerName: '', sellerBal: 0,
+      buyerName:  '', buyerBal:  0,
+      fmt
+    });
+  } catch (err) {
+    console.error('Invoice add error:', err);
+    req.flash('error', 'Error opening form');
+    res.redirect('/invoices');
+  }
+});
+
+// ── GET /invoices/edit/:id ────────────────────────────────────────
+app.get('/invoices/edit/:id', isAuthenticated, async (req, res) => {
+  const cc = req.session.user.company_code;
+  try {
+    const [[inv]] = await db.query(
+      'SELECT * FROM invoices WHERE id = ? AND company_code = ?',
+      [req.params.id, cc]
+    );
+    if (!inv) {
+      req.flash('error', 'Invoice not found');
+      return res.redirect('/invoices');
+    }
+    inv.bill_date = toDisplayDate(inv.bill_date);
+
+    // Reconstruct gross amounts from net + deductions
+    inv.seller_amount = nv(inv.seller_net)
+      + nv(inv.seller_cartage) + nv(inv.seller_brokery)
+      + nv(inv.seller_mf)      + nv(inv.seller_phone) + nv(inv.seller_other);
+    inv.buyer_amount  = nv(inv.buyer_net)
+      + nv(inv.buyer_cartage)  - nv(inv.buyer_brokery)
+      + nv(inv.buyer_mf)       + nv(inv.buyer_phone)  + nv(inv.buyer_other);
+
+    // Party names + running balances
+    let sellerName = '', sellerBal = 0, buyerName = '', buyerBal = 0;
+
+    if (inv.seller_code) {
+      const [[sa]] = await db.query(
+        'SELECT name, opening_balance FROM accounts WHERE account_code=? AND company_code=?',
+        [inv.seller_code, cc]
+      );
+      if (sa) {
+        sellerName = sa.name;
+        const [[st]] = await db.query(
+          `SELECT COALESCE(SUM(debit),0) d, COALESCE(SUM(credit),0) c
+           FROM transactions WHERE account_code=? AND company_code=?`,
+          [inv.seller_code, cc]
+        );
+        sellerBal = nv(sa.opening_balance) + nv(st.d) - nv(st.c);
+      }
+    }
+    if (inv.buyer_code) {
+      const [[ba]] = await db.query(
+        'SELECT name, opening_balance FROM accounts WHERE account_code=? AND company_code=?',
+        [inv.buyer_code, cc]
+      );
+      if (ba) {
+        buyerName = ba.name;
+        const [[bt]] = await db.query(
+          `SELECT COALESCE(SUM(debit),0) d, COALESCE(SUM(credit),0) c
+           FROM transactions WHERE account_code=? AND company_code=?`,
+          [inv.buyer_code, cc]
+        );
+        buyerBal = nv(ba.opening_balance) + nv(bt.d) - nv(bt.c);
+      }
+    }
+
+    res.render('invoices/form', {
+      inv, nextBillNo: null, today: inv.bill_date,
+      sellerName, sellerBal,
+      buyerName,  buyerBal,
+      fmt
+    });
+  } catch (err) {
+    console.error('Invoice edit error:', err);
+    req.flash('error', 'Error loading invoice');
+    res.redirect('/invoices');
+  }
+});
+
+// ── POST /invoices/save ───────────────────────────────────────────
+app.post('/invoices/save', isAuthenticated, async (req, res) => {
+  const cc = req.session.user.company_code;
+  const b  = req.body;
+
+  const sNet = nv(b.seller_amount)
+             - nv(b.seller_cartage) - nv(b.seller_brokery)
+             - nv(b.seller_mf)      - nv(b.seller_phone) - nv(b.seller_other);
+  const bNet = nv(b.buyer_amount)
+             - nv(b.buyer_cartage)  + nv(b.buyer_brokery)
+             - nv(b.buyer_mf)       - nv(b.buyer_phone)  - nv(b.buyer_other);
+  const diff = Math.round(bNet - sNet);
+
+  const fields = [
+    b.bill_no?.trim(), toDBDate(b.bill_date), b.vehicle_no || null,
+    b.seller_code || null, nv(b.seller_inv_no), nv(b.seller_serial),
+    b.buyer_code  || null, nv(b.buyer_inv_no),
+    nv(b.bags),
+    nv(b.seller_weight), nv(b.buyer_weight),
+    nv(b.seller_rate),   nv(b.buyer_rate),
+    nv(b.seller_cartage),nv(b.buyer_cartage),
+    nv(b.seller_mf),     nv(b.buyer_mf),
+    nv(b.seller_brokery),nv(b.buyer_brokery),
+    nv(b.seller_phone),  nv(b.buyer_phone),
+    nv(b.seller_other),  nv(b.buyer_other),
+    Math.round(sNet), Math.round(bNet), diff
+  ];
+
+  try {
+    if (b.invoice_id) {
+      // UPDATE
+      await db.query(`
+        UPDATE invoices SET
+          bill_no=?,        bill_date=?,       vehicle_no=?,
+          seller_code=?,    seller_inv_no=?,   seller_serial=?,
+          buyer_code=?,     buyer_inv_no=?,
+          bags=?,
+          seller_weight=?,  buyer_weight=?,
+          seller_rate=?,    buyer_rate=?,
+          seller_cartage=?, buyer_cartage=?,
+          seller_mf=?,      buyer_mf=?,
+          seller_brokery=?, buyer_brokery=?,
+          seller_phone=?,   buyer_phone=?,
+          seller_other=?,   buyer_other=?,
+          seller_net=?,     buyer_net=?,       diff=?
+        WHERE id=? AND company_code=?`,
+        [...fields, b.invoice_id, cc]
+      );
+      req.flash('success', `Invoice #${b.bill_no} updated successfully`);
+    } else {
+      // INSERT
+      await db.query(`
+        INSERT INTO invoices (
+          bill_no, bill_date, vehicle_no,
+          seller_code, seller_inv_no, seller_serial,
+          buyer_code,  buyer_inv_no,
+          bags,
+          seller_weight, buyer_weight,
+          seller_rate,   buyer_rate,
+          seller_cartage,buyer_cartage,
+          seller_mf,     buyer_mf,
+          seller_brokery,buyer_brokery,
+          seller_phone,  buyer_phone,
+          seller_other,  buyer_other,
+          seller_net,    buyer_net,    diff,
+          company_code
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [...fields, cc]
+      );
+      req.flash('success', `Invoice #${b.bill_no} saved successfully`);
+    }
+    res.redirect('/invoices');
+  } catch (err) {
+    console.error('Invoice save error:', err);
+    req.flash('error', 'Save failed: ' + err.message);
+    res.redirect(b.invoice_id ? `/invoices/edit/${b.invoice_id}` : '/invoices/add');
+  }
+});
+
+// ── POST /invoices/delete/:id ─────────────────────────────────────
+app.post('/invoices/delete/:id', isAuthenticated, async (req, res) => {
+  const cc = req.session.user.company_code;
+  try {
+    await db.query('DELETE FROM invoices WHERE id=? AND company_code=?', [req.params.id, cc]);
+    req.flash('success', 'Invoice deleted');
+  } catch (err) {
+    console.error('Invoice delete error:', err);
+    req.flash('error', 'Could not delete invoice');
+  }
+  res.redirect('/invoices');
+});
+
+// ── API: next bill no (AJAX) ──────────────────────────────────────
+app.get('/invoices/api/next-bill-no', isAuthenticated, async (req, res) => {
+  const cc = req.session.user.company_code;
+  const [[last]] = await db.query(
+    `SELECT bill_no FROM invoices WHERE company_code=?
+     ORDER BY CAST(bill_no AS UNSIGNED) DESC LIMIT 1`,
+    [cc]
+  );
+  res.json({ next: last ? parseInt(last.bill_no) + 1 : 1 });
+});
+
+// ── API: party lookup by code (AJAX) ─────────────────────────────
+app.get('/invoices/api/party/:code', isAuthenticated, async (req, res) => {
+  const cc   = req.session.user.company_code;
+  const code = req.params.code.trim();
+  const [[acc]] = await db.query(
+    'SELECT name, opening_balance FROM accounts WHERE account_code=? AND company_code=?',
+    [code, cc]
+  );
+  if (!acc) return res.json({ found: false });
+
+  const [[txn]] = await db.query(
+    `SELECT COALESCE(SUM(debit),0) d, COALESCE(SUM(credit),0) c
+     FROM transactions WHERE account_code=? AND company_code=?`,
+    [code, cc]
+  );
+  const balance = nv(acc.opening_balance) + nv(txn.d) - nv(txn.c);
+  res.json({ found: true, name: acc.name, balance: balance.toFixed(2) });
 });
 
 // app.listen(3000, () => console.log('Server running on http://localhost:3000'));
