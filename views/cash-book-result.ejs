@@ -11,12 +11,12 @@
       font-size: 14px;
     }
 
-  .acc-cell {
-    white-space: normal !important;
-    overflow: visible !important;
-    text-overflow: clip !important;
-    max-width: none !important;
-  }
+    .acc-cell {
+      white-space: normal !important;
+      overflow: visible !important;
+      text-overflow: clip !important;
+      max-width: none !important;
+    }
 
     @media (max-width: 576px) {
 
@@ -98,15 +98,18 @@
                 </td>
               </tr>
               <% rows.forEach(r=> { %>
-                <% const accLabel=r.party_account || '-' ; 
-                   const accShort=accLabel; %>
+                <% const accLabel=r.party_account || '-' ; const accShort=accLabel; %>
 
                   <tr>
                     <td style="white-space:nowrap;">
                       <%= r.date %>
                     </td>
                     <td>
-                      <%= r.voucher_no || '-' %>
+                      <% if (r.voucher_no) { %>
+                        <a href="/search?query=<%= r.voucher_no %>" class="text-decoration-none fw-semibold">
+                          <%= r.voucher_no %>
+                        </a>
+                        <% } else { %>-<% } %>
                     </td>
                     <td class="acc-cell" title="<%= accLabel %>">
                       <%= accShort %>
@@ -152,9 +155,12 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script type="application/json" id="reportData">
+  <%- JSON.stringify({ rows, totals, opening, start_date, end_date, company_code, cash_account }) %>
+</script>
 
   <script>
-    const data = <% - JSON.stringify({ rows, totals, opening, start_date, end_date, company_code, cash_account }) %>;
+    const data = JSON.parse(document.getElementById('reportData').textContent);
 
     function fmtExport(n) {
       return Number(n || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');

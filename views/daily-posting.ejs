@@ -72,7 +72,9 @@
                   <%= e.formatted_date %>
                 </td>
                 <td>
-                  <%= e.voucher_no %>
+                  <a href="/search?query=<%= e.voucher_no %>" class="text-decoration-none fw-semibold">
+                    <%= e.voucher_no %>
+                  </a>
                 </td>
                 <td>
                   <%= e.account_code %> - <%= e.account_name %>
