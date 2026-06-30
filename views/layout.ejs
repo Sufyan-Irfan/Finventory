@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <title>FINVENTORY</title>
   <meta charset="UTF-8">
@@ -39,7 +40,9 @@
       display: block;
     }
 
-    .sidebar a:hover { background: #495057; }
+    .sidebar a:hover {
+      background: #495057;
+    }
 
     .sidebar .dropdown-menu {
       background: #2c2f33 !important;
@@ -51,13 +54,16 @@
       padding-left: 1.5rem;
     }
 
-    .sidebar .dropdown-item:hover { background: #495057 !important; }
+    .sidebar .dropdown-item:hover {
+      background: #495057 !important;
+    }
 
     /* Mobile: sidebar hidden by default */
     @media (max-width: 768px) {
       .sidebar {
         transform: translateX(-100%);
       }
+
       .sidebar.open {
         transform: translateX(0);
       }
@@ -68,10 +74,13 @@
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.5);
+      background: rgba(0, 0, 0, 0.5);
       z-index: 1035;
     }
-    .sidebar-overlay.show { display: block; }
+
+    .sidebar-overlay.show {
+      display: block;
+    }
 
     /* ===================== TOPBAR ===================== */
     .topbar {
@@ -122,8 +131,13 @@
 
     /* Hide date/time on very small screens */
     @media (max-width: 480px) {
-      .time-date { display: none; }
-      .search-box { width: 110px !important; }
+      .time-date {
+        display: none;
+      }
+
+      .search-box {
+        width: 110px !important;
+      }
     }
 
     .topbar-left {
@@ -152,7 +166,9 @@
     }
 
     @media (max-width: 768px) {
-      .hamburger-btn { display: block; }
+      .hamburger-btn {
+        display: block;
+      }
     }
 
     .calculator-btn {
@@ -166,7 +182,9 @@
       font-size: 0.9rem;
     }
 
-    .calculator-btn:hover { background: #e9ecef; }
+    .calculator-btn:hover {
+      background: #e9ecef;
+    }
 
     /* ===================== CALCULATOR ===================== */
     .calculator-popup {
@@ -216,11 +234,26 @@
       cursor: pointer;
     }
 
-    .calc-btn:hover { background: #d6d8db; }
-    .calc-btn.operator { background: #dee2e6; }
-    .calc-btn.operator:hover { background: #ced4da; }
-    .calc-btn.equal { background: #0d6efd; color: white; }
-    .calc-btn.equal:hover { background: #0b5ed7; }
+    .calc-btn:hover {
+      background: #d6d8db;
+    }
+
+    .calc-btn.operator {
+      background: #dee2e6;
+    }
+
+    .calc-btn.operator:hover {
+      background: #ced4da;
+    }
+
+    .calc-btn.equal {
+      background: #0d6efd;
+      color: white;
+    }
+
+    .calc-btn.equal:hover {
+      background: #0b5ed7;
+    }
 
     /* ===================== SIDEBAR CLOSE BTN ===================== */
     .sidebar-close {
@@ -237,7 +270,9 @@
     }
 
     @media (max-width: 768px) {
-      .sidebar-close { display: block; }
+      .sidebar-close {
+        display: block;
+      }
     }
   </style>
 </head>
@@ -273,10 +308,31 @@
         data-bs-toggle="dropdown">
         <span><i class="bi bi-journal-plus"></i> Transactions</span>
       </a>
+
       <ul class="dropdown-menu dropdown-menu-dark border-0 shadow w-100 ms-3">
-        <li><a class="dropdown-item" href="/gl/add-transaction?type=receipt">Receipt Voucher</a></li>
-        <li><a class="dropdown-item" href="/gl/add-transaction?type=payment">Payment Voucher</a></li>
-        <li><a class="dropdown-item" href="/views/list.ejs">Invoice Voucher</a></li>
+        <li>
+          <a class="dropdown-item" href="/gl/add-transaction?type=receipt">
+            Receipt Voucher
+          </a>
+        </li>
+
+        <li>
+          <a class="dropdown-item" href="/gl/add-transaction?type=payment">
+            Payment Voucher
+          </a>
+        </li>
+
+        <li>
+          <a class="dropdown-item" href="/invoices">
+            Invoice List
+          </a>
+        </li>
+
+        <li>
+          <a class="dropdown-item" href="/invoices/add">
+            Add Invoice
+          </a>
+        </li>
       </ul>
     </div>
 
@@ -296,9 +352,9 @@
 
     <a href="/setup/settings"><i class="bi bi-gear"></i> Setup</a>
 
-    <% if (currentUser && currentUser.role === 'admin') { %>
+    <% if (currentUser && currentUser.role==='admin' ) { %>
       <a href="/users"><i class="bi bi-people"></i> Manage Users</a>
-    <% } %>
+      <% } %>
   </div>
 
   <!-- 📋 Topbar -->
@@ -312,10 +368,12 @@
       <div class="fw-semibold" style="font-size:0.9rem;">
         <i class="bi bi-person-circle"></i>
         <% if (currentUser) { %>
-          <span><%= currentUser.username %></span>
-        <% } else { %>
-          Guest
-        <% } %>
+          <span>
+            <%= currentUser.username %>
+          </span>
+          <% } else { %>
+            Guest
+            <% } %>
       </div>
 
       <!-- Calculator -->
@@ -337,23 +395,22 @@
 
     <div class="topbar-right">
       <!-- Search -->
-      <input type="text" id="searchInput" class="form-control form-control-sm search-box"
-        style="width:160px;" placeholder="🔍 Search">
+      <input type="text" id="searchInput" class="form-control form-control-sm search-box" style="width:160px;"
+        placeholder="🔍 Search">
 
       <!-- User / Company dropdown -->
       <% if (currentUser) { %>
         <div class="dropdown">
-          <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
-            data-bs-toggle="dropdown">
+          <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
             <%= currentUser.company_code %>
           </button>
           <ul class="dropdown-menu dropdown-menu-end shadow">
             <li><a class="dropdown-item text-danger" href="/logout">
-              <i class="bi bi-box-arrow-right"></i> Logout
-            </a></li>
+                <i class="bi bi-box-arrow-right"></i> Logout
+              </a></li>
           </ul>
         </div>
-      <% } %>
+        <% } %>
     </div>
   </div>
 
@@ -399,10 +456,10 @@
 
   <script>
     // ===================== HAMBURGER =====================
-    const sidebar        = document.getElementById('sidebar');
-    const overlay        = document.getElementById('sidebarOverlay');
-    const hamburgerBtn   = document.getElementById('hamburgerBtn');
-    const sidebarClose   = document.getElementById('sidebarClose');
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const hamburgerBtn = document.getElementById('hamburgerBtn');
+    const sidebarClose = document.getElementById('sidebarClose');
 
     function openSidebar() {
       sidebar.classList.add('open');
@@ -426,9 +483,9 @@
     });
 
     // ===================== CALCULATOR =====================
-    const calcPopup   = document.getElementById('calculatorPopup');
+    const calcPopup = document.getElementById('calculatorPopup');
     const calcDisplay = document.getElementById('calcDisplay');
-    const calcToggle  = document.getElementById('calcToggleBtn');
+    const calcToggle = document.getElementById('calcToggleBtn');
 
     calcToggle.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -444,21 +501,21 @@
     calcPopup.querySelectorAll('.calc-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const val = btn.textContent.trim();
-        if (val === 'CE')     clearCalc();
+        if (val === 'CE') clearCalc();
         else if (val === '=') calculate();
-        else                  calcDisplay.value += val;
+        else calcDisplay.value += val;
       });
     });
 
-    function clearCalc()  { calcDisplay.value = ''; }
-    function calculate()  {
-      try   { calcDisplay.value = eval(calcDisplay.value) || ''; }
+    function clearCalc() { calcDisplay.value = ''; }
+    function calculate() {
+      try { calcDisplay.value = eval(calcDisplay.value) || ''; }
       catch { calcDisplay.value = 'Error'; }
     }
 
     // ===================== DATE & TIME =====================
     function updateDateTime() {
-      const now  = new Date();
+      const now = new Date();
       document.getElementById('currentDate').textContent = now.toLocaleDateString('en-GB');
       document.getElementById('currentTime').textContent = now.toLocaleTimeString();
     }
@@ -466,7 +523,7 @@
     updateDateTime();
 
     // ===================== SEARCH =====================
-    $('#searchInput').on('keypress', function(e) {
+    $('#searchInput').on('keypress', function (e) {
       if (e.which === 13) {
         const q = $(this).val().trim();
         if (q) window.location.href = `/search?query=${q}`;
@@ -474,4 +531,5 @@
     });
   </script>
 </body>
+
 </html>

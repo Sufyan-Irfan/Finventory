@@ -1,15 +1,15 @@
-<%# views/invoices/form.ejs — no HTML wrapper, expressLayouts handles it %>
+<%# views/invoices/form.ejs — no HTML wrapper, layout handles it %>
 <% const isEdit = !!inv; %>
 <% const d = inv || {}; %>
 
 <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet">
 
-<% if (success && success.length) { %>
+<% if (typeof success !== 'undefined' && success && success.length) { %>
   <div class="alert alert-success alert-dismissible fade show py-2">
     <%- success %><button type="button" class="btn-close" data-bs-dismiss="alert"></button>
   </div>
 <% } %>
-<% if (error && error.length) { %>
+<% if (typeof error !== 'undefined' && error && error.length) { %>
   <div class="alert alert-danger alert-dismissible fade show py-2">
     <%- error %><button type="button" class="btn-close" data-bs-dismiss="alert"></button>
   </div>
@@ -23,13 +23,11 @@
     <div class="card-body py-2 px-3">
       <div class="row g-2 align-items-end">
 
-        <%# Diff badge %>
         <div class="col-auto">
           <div class="small text-muted mb-1 fw-semibold">Invoice Diff</div>
           <span id="diffBadge" class="badge bg-success fs-6 px-3 py-2">0</span>
         </div>
 
-        <%# Bill No %>
         <div class="col-md-2">
           <label class="form-label mb-1 small fw-semibold">Bill No.</label>
           <div class="input-group input-group-sm">
@@ -44,7 +42,6 @@
           </div>
         </div>
 
-        <%# Bill Date %>
         <div class="col-md-2">
           <label class="form-label mb-1 small fw-semibold">Bill Date</label>
           <div class="input-group input-group-sm">
@@ -56,7 +53,6 @@
           </div>
         </div>
 
-        <%# Vehicle %>
         <div class="col-md-2">
           <label class="form-label mb-1 small fw-semibold">Vehicle No.</label>
           <input type="text" class="form-control form-control-sm"
@@ -64,7 +60,6 @@
                  value="<%= d.vehicle_no || '' %>">
         </div>
 
-        <%# Buttons %>
         <div class="col-auto ms-auto d-flex gap-2 align-items-end">
           <a href="/invoices" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-x-lg me-1"></i>Cancel
@@ -91,19 +86,16 @@
         </div>
         <div class="card-body">
 
-          <%# Code + Name %>
-          <div class="row g-2 mb-2">
-            <div class="col-5">
-              <label class="form-label mb-1 small fw-semibold">Seller Code</label>
-              <input type="text" class="form-control form-control-sm"
-                     name="seller_code" id="seller_code"
-                     value="<%= d.seller_code || '' %>" placeholder="Account code">
-            </div>
-            <div class="col-7">
-              <label class="form-label mb-1 small fw-semibold">Name</label>
-              <input type="text" class="form-control form-control-sm bg-light"
-                     id="seller_name" readonly
-                     value="<%= sellerName || '' %>" placeholder="Auto from code">
+          <%# ✅ ACCOUNT SEARCH — transaction page wala pattern %>
+          <div class="mb-2" style="position:relative;">
+            <label class="form-label mb-1 small fw-semibold">Seller Account</label>
+            <input type="text" id="sellerSearch" class="form-control form-control-sm"
+                   placeholder="Type code or name..." autocomplete="off"
+                   value="<%= d.seller_code ? (d.seller_code + (sellerName ? ' - ' + sellerName : '')) : '' %>">
+            <input type="hidden" id="seller_code" name="seller_code" value="<%= d.seller_code || '' %>" required>
+            <div id="sellerDropdown"
+                 style="position:absolute;z-index:9999;background:#fff;border:1px solid #ccc;
+                        border-radius:4px;max-height:200px;overflow-y:auto;width:100%;display:none;">
             </div>
           </div>
 
@@ -134,7 +126,6 @@
 
           <div class="border-top pt-2 mb-2 small text-muted fw-semibold">Quantity</div>
 
-          <%# Bags %>
           <div class="mb-2">
             <label class="form-label mb-1 small fw-semibold">
               Bags
@@ -147,7 +138,6 @@
                    oninput="onSellerChange('bags')">
           </div>
 
-          <%# Seller Weight %>
           <div class="mb-3">
             <label class="form-label mb-1 small fw-semibold">
               Weight
@@ -160,9 +150,8 @@
                    oninput="onSellerChange('weight')">
           </div>
 
-          <div class="border-top pt-2 mb-2 small text-muted fw-semibold">Rate & Amount</div>
+          <div class="border-top pt-2 mb-2 small text-muted fw-semibold">Rate &amp; Amount</div>
 
-          <%# Rate %>
           <div class="mb-2">
             <label class="form-label mb-1 small fw-semibold">Seller Rate</label>
             <input type="number" class="form-control form-control-sm"
@@ -171,7 +160,6 @@
                    oninput="calcAmt('seller')">
           </div>
 
-          <%# Amount %>
           <div class="mb-3">
             <label class="form-label mb-1 small fw-semibold">
               Amount
@@ -202,22 +190,24 @@
                      oninput="calcNet()">
             </div>
           </div>
-          <div class="row g-2 mb-2">
-            <div class="col-6">
-              <label class="form-label mb-1 small">M/F</label>
-              <input type="number" class="form-control form-control-sm"
-                     name="seller_mf" id="seller_mf"
-                     value="<%= d.seller_mf || '' %>" placeholder="0"
-                     oninput="calcNet()">
-            </div>
-            <div class="col-6">
-              <label class="form-label mb-1 small">Phone</label>
-              <input type="number" class="form-control form-control-sm"
-                     name="seller_phone" id="seller_phone"
-                     value="<%= d.seller_phone || '' %>" placeholder="0"
-                     oninput="calcNet()">
-            </div>
+          <div class="mb-2">
+            <label class="form-label mb-1 small">M/F</label>
+            <input type="number" class="form-control form-control-sm"
+                   name="seller_mf" id="seller_mf"
+                   value="<%= d.seller_mf || '' %>" placeholder="0"
+                   oninput="calcNet()">
           </div>
+
+          <%# ✅ FIX: Phone — sirf reference field, net calc mein nahi %>
+          <div class="mb-2">
+            <label class="form-label mb-1 small">
+              Phone <small class="text-muted">(reference only — calc mein shamil nahi)</small>
+            </label>
+            <input type="text" class="form-control form-control-sm"
+                   name="seller_phone" id="seller_phone"
+                   value="<%= d.seller_phone || '' %>" placeholder="03xx-xxxxxxx">
+          </div>
+
           <div class="mb-3">
             <label class="form-label mb-1 small">Others (deduction)</label>
             <input type="number" class="form-control form-control-sm"
@@ -226,7 +216,6 @@
                    oninput="calcNet()">
           </div>
 
-          <%# Seller Net %>
           <div class="d-flex justify-content-between align-items-center
                       rounded px-3 py-2"
                style="background:#e7f1ff;border:1px solid #b6d4fe;">
@@ -252,19 +241,16 @@
         </div>
         <div class="card-body">
 
-          <%# Code + Name %>
-          <div class="row g-2 mb-2">
-            <div class="col-5">
-              <label class="form-label mb-1 small fw-semibold">Buyer Code</label>
-              <input type="text" class="form-control form-control-sm"
-                     name="buyer_code" id="buyer_code"
-                     value="<%= d.buyer_code || '' %>" placeholder="Account code">
-            </div>
-            <div class="col-7">
-              <label class="form-label mb-1 small fw-semibold">Name</label>
-              <input type="text" class="form-control form-control-sm bg-light"
-                     id="buyer_name" readonly
-                     value="<%= buyerName || '' %>" placeholder="Auto from code">
+          <%# ✅ ACCOUNT SEARCH — transaction page wala pattern %>
+          <div class="mb-2" style="position:relative;">
+            <label class="form-label mb-1 small fw-semibold">Buyer Account</label>
+            <input type="text" id="buyerSearch" class="form-control form-control-sm"
+                   placeholder="Type code or name..." autocomplete="off"
+                   value="<%= d.buyer_code ? (d.buyer_code + (buyerName ? ' - ' + buyerName : '')) : '' %>">
+            <input type="hidden" id="buyer_code" name="buyer_code" value="<%= d.buyer_code || '' %>" required>
+            <div id="buyerDropdown"
+                 style="position:absolute;z-index:9999;background:#fff;border:1px solid #ccc;
+                        border-radius:4px;max-height:200px;overflow-y:auto;width:100%;display:none;">
             </div>
           </div>
 
@@ -277,7 +263,6 @@
             </strong>
           </div>
 
-          <%# Inv No %>
           <div class="row g-2 mb-3">
             <div class="col-6">
               <label class="form-label mb-1 small fw-semibold">Inv No.</label>
@@ -290,7 +275,6 @@
 
           <div class="border-top pt-2 mb-2 small text-muted fw-semibold">Quantity</div>
 
-          <%# Buyer Bags (synced) %>
           <div class="mb-2">
             <label class="form-label mb-1 small fw-semibold">
               Bags
@@ -303,7 +287,6 @@
                    oninput="onBuyerChange('bags')">
           </div>
 
-          <%# Buyer Weight %>
           <div class="mb-3">
             <label class="form-label mb-1 small fw-semibold">
               Weight
@@ -316,9 +299,8 @@
                    oninput="onBuyerChange('weight')">
           </div>
 
-          <div class="border-top pt-2 mb-2 small text-muted fw-semibold">Rate & Amount</div>
+          <div class="border-top pt-2 mb-2 small text-muted fw-semibold">Rate &amp; Amount</div>
 
-          <%# Buyer Rate %>
           <div class="mb-2">
             <label class="form-label mb-1 small fw-semibold">Buyer Rate</label>
             <input type="number" class="form-control form-control-sm"
@@ -327,7 +309,6 @@
                    oninput="calcAmt('buyer')">
           </div>
 
-          <%# Buyer Amount %>
           <div class="mb-3">
             <label class="form-label mb-1 small fw-semibold">
               Amount
@@ -352,8 +333,7 @@
             </div>
             <div class="col-6">
               <label class="form-label mb-1 small">
-                Brokery
-                <small class="text-success fw-normal">(+ added)</small>
+                Brokery <small class="text-success fw-normal">(+ added)</small>
               </label>
               <input type="number" class="form-control form-control-sm"
                      name="buyer_brokery" id="buyer_brokery"
@@ -361,22 +341,24 @@
                      oninput="calcNet()">
             </div>
           </div>
-          <div class="row g-2 mb-2">
-            <div class="col-6">
-              <label class="form-label mb-1 small">M/F</label>
-              <input type="number" class="form-control form-control-sm"
-                     name="buyer_mf" id="buyer_mf"
-                     value="<%= d.buyer_mf || '' %>" placeholder="0"
-                     oninput="calcNet()">
-            </div>
-            <div class="col-6">
-              <label class="form-label mb-1 small">Phone</label>
-              <input type="number" class="form-control form-control-sm"
-                     name="buyer_phone" id="buyer_phone"
-                     value="<%= d.buyer_phone || '' %>" placeholder="0"
-                     oninput="calcNet()">
-            </div>
+          <div class="mb-2">
+            <label class="form-label mb-1 small">M/F</label>
+            <input type="number" class="form-control form-control-sm"
+                   name="buyer_mf" id="buyer_mf"
+                   value="<%= d.buyer_mf || '' %>" placeholder="0"
+                   oninput="calcNet()">
           </div>
+
+          <%# ✅ FIX: Phone — sirf reference field, net calc mein nahi %>
+          <div class="mb-2">
+            <label class="form-label mb-1 small">
+              Phone <small class="text-muted">(reference only — calc mein shamil nahi)</small>
+            </label>
+            <input type="text" class="form-control form-control-sm"
+                   name="buyer_phone" id="buyer_phone"
+                   value="<%= d.buyer_phone || '' %>" placeholder="03xx-xxxxxxx">
+          </div>
+
           <div class="mb-3">
             <label class="form-label mb-1 small">Others (deduction)</label>
             <input type="number" class="form-control form-control-sm"
@@ -385,7 +367,6 @@
                    oninput="calcNet()">
           </div>
 
-          <%# Buyer Net %>
           <div class="d-flex justify-content-between align-items-center
                       rounded px-3 py-2"
                style="background:#d1e7dd;border:1px solid #a3cfbb;">
@@ -407,11 +388,21 @@
 <%# ─── CLIENT SCRIPT ─── %>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script>
-// ── state ─────────────────────────────────────────────────────────
+// ── Accounts list (from server) — dropdown search ke liye ─────────
+const allAccounts = [];
+<% accounts.forEach(function(a) { %>
+  allAccounts.push({
+    code:  "<%= a.account_code %>".trim(),
+    name:  `<%- a.name.replace(/`/g, "'") %>`.trim(),
+    label: "<%= a.account_code %>".trim() + " - " + `<%- a.name.replace(/`/g, "'") %>`.trim()
+  });
+<% }); %>
+
+// ── state ────────────────────────────────────────────────────────
 const syncOn    = { bags: true, weight: true };
 const amtManual = { seller: false, buyer: false };
 
-// ── DOM helpers ───────────────────────────────────────────────────
+// ── DOM helpers ──────────────────────────────────────────────────
 const el  = id => document.getElementById(id);
 const num = id => parseFloat(el(id)?.value) || 0;
 const set = (id, v) => { if (el(id)) el(id).value = v; };
@@ -420,11 +411,107 @@ function fmtJS(n) {
   return Math.round(n).toLocaleString('en-PK');
 }
 
-// ── Date: text ↔ calendar ─────────────────────────────────────────
+// ── Balance fetch (via existing invoice party API) ─────────────────
+async function fetchInvBalance(code, targetSelector) {
+  if (!code) { document.querySelector(targetSelector).textContent = '0.00'; return; }
+  try {
+    const r = await fetch(`/invoices/api/party/${encodeURIComponent(code)}`);
+    const j = await r.json();
+    document.querySelector(targetSelector).textContent = j.found
+      ? Number(j.balance).toLocaleString('en-PK', { minimumFractionDigits: 2 })
+      : '0.00';
+  } catch { document.querySelector(targetSelector).textContent = '0.00'; }
+}
+
+// ── Generic searchable dropdown factory (transaction page pattern) ─
+function makeDropdown(searchId, dropdownId, hiddenId, onSelect) {
+  const searchEl   = document.getElementById(searchId);
+  const dropdownEl = document.getElementById(dropdownId);
+  const hiddenEl   = document.getElementById(hiddenId);
+  let hi = -1;
+
+  function pick(a) {
+    searchEl.value = a.label;
+    hiddenEl.value = a.code;
+    dropdownEl.style.display = 'none';
+    hi = -1;
+    if (onSelect) onSelect(a);
+  }
+
+  function render(q) {
+    dropdownEl.innerHTML = '';
+    hi = -1;
+    const list = q
+      ? allAccounts.filter(a => a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)).slice(0, 50)
+      : allAccounts.slice(0, 50);
+    dropdownEl._list = list;
+    if (!list.length) { dropdownEl.style.display = 'none'; return; }
+    list.forEach((a, i) => {
+      const row = document.createElement('div');
+      row.textContent = a.label;
+      row.style.cssText = 'padding:8px 12px;cursor:pointer;border-bottom:1px solid #eee;font-size:14px;';
+      row.onmouseenter = () => { hi = i; hl(); };
+      row.onmousedown  = e => { e.preventDefault(); pick(a); };
+      dropdownEl.appendChild(row);
+    });
+    dropdownEl.style.display = 'block';
+  }
+
+  function hl() {
+    dropdownEl.querySelectorAll('div').forEach((d, i) => {
+      d.style.background = i === hi ? '#d0e8ff' : '#fff';
+    });
+    const active = dropdownEl.querySelectorAll('div')[hi];
+    if (active) active.scrollIntoView({ block: 'nearest' });
+  }
+
+  searchEl.addEventListener('input', function () {
+    hiddenEl.value = '';
+    render(this.value.toLowerCase().trim());
+  });
+  searchEl.addEventListener('keydown', function (e) {
+    const list = dropdownEl._list || [];
+    if      (e.key === 'ArrowDown') { e.preventDefault(); hi = Math.min(hi+1, list.length-1); hl(); }
+    else if (e.key === 'ArrowUp')   { e.preventDefault(); hi = Math.max(hi-1, 0); hl(); }
+    else if (e.key === 'Enter')     { e.preventDefault(); if (hi >= 0 && list[hi]) pick(list[hi]); }
+    else if (e.key === 'Escape')    { dropdownEl.style.display = 'none'; }
+  });
+  searchEl.addEventListener('blur',  () => setTimeout(() => dropdownEl.style.display = 'none', 200));
+  searchEl.addEventListener('focus', function () { render(this.value.toLowerCase().trim()); });
+
+  function setByCode(code) {
+    const c = String(code).trim();
+    const found = allAccounts.find(a => a.code === c);
+    if (found) {
+      searchEl.value = found.label;
+      hiddenEl.value = found.code;
+      if (onSelect) onSelect(found);
+    } else if (c) {
+      searchEl.value = c;
+      hiddenEl.value = c;
+    }
+  }
+
+  return { setByCode, pick };
+}
+
+// ── Seller / Buyer dropdowns ────────────────────────────────────
+const sellerDD = makeDropdown('sellerSearch', 'sellerDropdown', 'seller_code',
+  a => fetchInvBalance(a.code, '#seller_balance'));
+
+const buyerDD = makeDropdown('buyerSearch', 'buyerDropdown', 'buyer_code',
+  a => fetchInvBalance(a.code, '#buyer_balance'));
+
+// ── Pre-fill on edit ─────────────────────────────────────────────
+const editSellerCode = "<%= d.seller_code || '' %>".trim();
+const editBuyerCode  = "<%= d.buyer_code  || '' %>".trim();
+if (editSellerCode) sellerDD.setByCode(editSellerCode);
+if (editBuyerCode)  buyerDD.setByCode(editBuyerCode);
+
+// ── Date: text ↔ calendar ────────────────────────────────────────
 const txtDate = el('bill_date_text');
 const calDate = el('bill_date_cal');
 
-// Pre-fill calendar on load
 (function() {
   const t = txtDate.value;
   if (/^\d{2}-\d{2}-\d{4}$/.test(t)) {
@@ -441,8 +528,8 @@ txtDate.addEventListener('input', function() {
 });
 calDate.addEventListener('change', function() {
   if (!this.value) return;
-  const [y,m,d] = this.value.split('-');
-  txtDate.value = `${d}-${m}-${y}`;
+  const [y,m,dd] = this.value.split('-');
+  txtDate.value = `${dd}-${m}-${y}`;
 });
 
 flatpickr('#bill_date_text', {
@@ -451,10 +538,10 @@ flatpickr('#bill_date_text', {
   defaultDate: txtDate.value || null,
   onChange(sel) {
     if (!sel.length) return;
-    const d  = sel[0];
-    const dd = String(d.getDate()).padStart(2,'0');
-    const mm = String(d.getMonth()+1).padStart(2,'0');
-    const yy = d.getFullYear();
+    const dt = sel[0];
+    const dd = String(dt.getDate()).padStart(2,'0');
+    const mm = String(dt.getMonth()+1).padStart(2,'0');
+    const yy = dt.getFullYear();
     txtDate.value = `${dd}-${mm}-${yy}`;
     calDate.value = `${yy}-${mm}-${dd}`;
   }
@@ -471,38 +558,6 @@ if (btnAuto) {
     } catch(e) { console.error(e); }
   });
 }
-
-// ── Party code lookup ─────────────────────────────────────────────
-const lookupTimer = {};
-function setupLookup(side) {
-  const codeEl = el(`${side}_code`);
-  if (!codeEl) return;
-  codeEl.addEventListener('input', function() {
-    clearTimeout(lookupTimer[side]);
-    const code = this.value.trim();
-    if (!code) {
-      el(`${side}_name`).value = '';
-      el(`${side}_balance`).textContent = '0.00';
-      return;
-    }
-    lookupTimer[side] = setTimeout(async () => {
-      try {
-        const r = await fetch(`/invoices/api/party/${encodeURIComponent(code)}`);
-        const j = await r.json();
-        if (j.found) {
-          el(`${side}_name`).value = j.name;
-          el(`${side}_balance`).textContent =
-            Number(j.balance).toLocaleString('en-PK', { minimumFractionDigits: 2 });
-        } else {
-          el(`${side}_name`).value = '';
-          el(`${side}_balance`).textContent = 'Not found';
-        }
-      } catch(e) { console.error(e); }
-    }, 500);
-  });
-}
-setupLookup('seller');
-setupLookup('buyer');
 
 // ── Sync: seller bags/weight → buyer ─────────────────────────────
 function toggleSync(field) {
@@ -524,7 +579,6 @@ function onSellerChange(field) {
   calcNet();
 }
 
-// Buyer manually typed → turn off sync silently
 function onBuyerChange(field) {
   syncOn[field] = false;
   if (field === 'bags') {
@@ -554,17 +608,17 @@ function calcAmt(side) {
   calcNet();
 }
 
-// ── Net amounts + diff ────────────────────────────────────────────
+// ── Net amounts + diff — ✅ FIX: phone hata diya formula se ───────
 function calcNet() {
   const sAmt = num('seller_amount');
   const sNet = sAmt
     - num('seller_cartage') - num('seller_brokery')
-    - num('seller_mf')      - num('seller_phone') - num('seller_other');
+    - num('seller_mf')      - num('seller_other');
 
   const bAmt = num('buyer_amount');
   const bNet = bAmt
     - num('buyer_cartage')  + num('buyer_brokery')
-    - num('buyer_mf')       - num('buyer_phone')  - num('buyer_other');
+    - num('buyer_mf')       - num('buyer_other');
 
   const sR = Math.round(sNet);
   const bR = Math.round(bNet);

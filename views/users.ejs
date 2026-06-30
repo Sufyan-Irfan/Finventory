@@ -5,18 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>User Management</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <style>
+    body { background: #f4f6f8; }
+    .stat-card {
+      border: none;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .stat-num { font-size: 1.6rem; font-weight: 700; }
+    .badge-active { background: #d1f7e3; color: #0a8a4a; font-weight: 600; }
+    .badge-paused { background: #fde2e2; color: #c0312b; font-weight: 600; }
+    .log-item { font-size: 0.82rem; border-bottom: 1px solid #eee; padding: 6px 0; }
+    .log-item:last-child { border-bottom: none; }
     @media (max-width: 576px) {
-      th, td { font-size: 13px; padding: 6px 8px !important; }
-      .btn-sm { font-size: 0.75rem; padding: 3px 6px; }
-      h3 { font-size: 1.3rem; }
+      th, td { font-size: 12.5px; padding: 6px 8px !important; }
+      .btn-sm { font-size: 0.72rem; padding: 3px 6px; }
+      h3 { font-size: 1.25rem; }
+      .stat-num { font-size: 1.3rem; }
     }
   </style>
 </head>
-<body class="bg-light">
+<body>
   <div class="container-fluid py-4 px-3 px-md-4">
-    <h3>User Management</h3>
-    <hr>
+    <h3 class="fw-bold mb-3"><i class="bi bi-shield-lock"></i> Admin Panel</h3>
 
     <% if (error && error.length) { %>
       <div class="alert alert-danger"><%= error %></div>
@@ -25,76 +37,199 @@
       <div class="alert alert-success"><%= success %></div>
     <% } %>
 
-    <!-- Add New User Form -->
-    <div class="card mb-4">
-      <div class="card-header bg-primary text-white">Add New User</div>
-      <div class="card-body">
-        <form action="/users/add" method="POST" class="row g-3">
-          <div class="col-12 col-sm-6 col-md-3">
-            <label class="form-label">Company Code</label>
-            <input type="text" name="company_code" class="form-control" required>
-          </div>
-          <div class="col-12 col-sm-6 col-md-3">
-            <label class="form-label">Username</label>
-            <input type="text" name="username" class="form-control" required>
-          </div>
-          <div class="col-12 col-sm-6 col-md-3">
-            <label class="form-label">Password</label>
-            <input type="password" name="password" class="form-control" required>
-          </div>
-          <div class="col-6 col-sm-3 col-md-2">
-            <label class="form-label">Role</label>
-            <select name="role" class="form-select">
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <div class="col-6 col-sm-3 col-md-1 d-flex align-items-end">
-            <button class="btn btn-success w-100">Add</button>
-          </div>
-        </form>
+    <!-- ===== STATS ===== -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="card stat-card p-3">
+          <div class="text-muted small">Total Companies</div>
+          <div class="stat-num"><%= stats.totalCompanies %></div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card stat-card p-3">
+          <div class="text-muted small">Active</div>
+          <div class="stat-num text-success"><%= stats.activeCompanies %></div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card stat-card p-3">
+          <div class="text-muted small">Paused</div>
+          <div class="stat-num text-danger"><%= stats.pausedCompanies %></div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card stat-card p-3">
+          <div class="text-muted small">Total Users</div>
+          <div class="stat-num"><%= stats.totalUsers %></div>
+        </div>
       </div>
     </div>
 
-    <!-- Users Table -->
-    <div class="table-responsive">
-    <table class="table table-bordered align-middle">
-      <thead class="table-dark">
-        <tr>
-          <th>#</th>
-          <th>Company Code</th>
-          <th>Username</th>
-          <th>Role</th>
-          <th width="150">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% users.forEach((u, i) => { %>
-          <tr>
-            <td><%= i + 1 %></td>
-            <td><%= u.company_code %></td>
-            <td><%= u.username %></td>
-            <td><%= u.role %></td>
-            <td>
-              <% if (u.username !== 'admin') { %>
-                <button class="btn btn-sm btn-warning me-1" 
-                        onclick="openEditModal(<%= u.id %>, '<%= u.company_code %>', '<%= u.username %>', '<%= u.role %>')">
-                  Edit
-                </button>
-                <form action="/users/delete/<%= u.id %>" method="POST" class="d-inline"
-                      onsubmit="return confirm('Delete this user?')">
-                  <button class="btn btn-danger btn-sm">Delete</button>
-                </form>
-              <% } %>
-            </td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
+    <div class="row g-4">
+      <div class="col-12 col-lg-8">
+
+        <!-- ===== COMPANY ACCESS CONTROL ===== -->
+        <div class="card mb-4">
+          <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-building"></i> Company Access Control</span>
+            <input type="text" id="companySearch" class="form-control form-control-sm" style="width:160px;" placeholder="🔍 Search company">
+          </div>
+          <div class="table-responsive">
+            <table class="table table-bordered align-middle mb-0" id="companyTable">
+              <thead class="table-light">
+                <tr>
+                  <th>Company Code</th>
+                  <th>Users</th>
+                  <th>Status</th>
+                  <th width="220">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% companies.forEach(c => { %>
+                  <tr>
+                    <td class="fw-semibold"><%= c.company_code %></td>
+                    <td><%= c.user_count %></td>
+                    <td>
+                      <% if (c.is_paused) { %>
+                        <span class="badge badge-paused">Paused</span>
+                      <% } else { %>
+                        <span class="badge badge-active">Active</span>
+                      <% } %>
+                    </td>
+                    <td>
+                      <% if (c.is_paused) { %>
+                        <form action="/company/resume" method="POST" class="d-inline">
+                          <input type="hidden" name="company_code" value="<%= c.company_code %>">
+                          <button class="btn btn-success btn-sm">Resume</button>
+                        </form>
+                        <button class="btn btn-outline-secondary btn-sm"
+                          onclick="openPauseModal('<%= c.company_code %>', `<%= (c.pause_message || '').replace(/`/g,'') %>`)">
+                          Edit Message
+                        </button>
+                      <% } else { %>
+                        <button class="btn btn-danger btn-sm"
+                          onclick="openPauseModal('<%= c.company_code %>', '')">
+                          Pause
+                        </button>
+                      <% } %>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ===== ADD USER ===== -->
+        <div class="card mb-4">
+          <div class="card-header bg-primary text-white">Add New User</div>
+          <div class="card-body">
+            <form action="/users/add" method="POST" class="row g-3">
+              <div class="col-12 col-sm-6 col-md-3">
+                <label class="form-label">Company Code</label>
+                <input type="text" name="company_code" class="form-control" required>
+              </div>
+              <div class="col-12 col-sm-6 col-md-3">
+                <label class="form-label">Username</label>
+                <input type="text" name="username" class="form-control" required>
+              </div>
+              <div class="col-12 col-sm-6 col-md-3">
+                <label class="form-label">Password</label>
+                <input type="password" name="password" class="form-control" required>
+              </div>
+              <div class="col-6 col-sm-3 col-md-2">
+                <label class="form-label">Role</label>
+                <select name="role" class="form-select">
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div class="col-6 col-sm-3 col-md-1 d-flex align-items-end">
+                <button class="btn btn-success w-100">Add</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- ===== USERS TABLE ===== -->
+        <div class="card">
+          <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-people"></i> Users</span>
+            <input type="text" id="userSearch" class="form-control form-control-sm" style="width:160px;" placeholder="🔍 Search user">
+          </div>
+          <div class="table-responsive">
+            <table class="table table-bordered align-middle mb-0" id="userTable">
+              <thead class="table-light">
+                <tr>
+                  <th>#</th>
+                  <th>Company</th>
+                  <th>Username</th>
+                  <th>Role</th>
+                  <th>Last Login</th>
+                  <th width="220">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% users.forEach((u, i) => { %>
+                  <tr>
+                    <td><%= i + 1 %></td>
+                    <td><%= u.company_code %></td>
+                    <td><%= u.username %></td>
+                    <td><span class="badge bg-secondary"><%= u.role %></span></td>
+                    <td class="small text-muted">
+                      <%= u.last_login ? new Date(u.last_login).toLocaleString('en-GB') : 'Never' %>
+                    </td>
+                    <td>
+                      <% if (u.username !== 'admin') { %>
+                        <button class="btn btn-sm btn-warning me-1"
+                                onclick="openEditModal(<%= u.id %>, '<%= u.company_code %>', '<%= u.username %>', '<%= u.role %>')">
+                          Edit
+                        </button>
+                        <form action="/users/force-logout/<%= u.id %>" method="POST" class="d-inline"
+                              onsubmit="return confirm('Logout this user from all devices?')">
+                          <button class="btn btn-sm btn-outline-dark me-1">Logout</button>
+                        </form>
+                        <form action="/users/delete/<%= u.id %>" method="POST" class="d-inline"
+                              onsubmit="return confirm('Delete this user?')">
+                          <button class="btn btn-danger btn-sm">Delete</button>
+                        </form>
+                      <% } %>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ===== ACTIVITY LOG ===== -->
+      <div class="col-12 col-lg-4">
+        <div class="card">
+          <div class="card-header bg-dark text-white">
+            <i class="bi bi-clock-history"></i> Recent Activity
+          </div>
+          <div class="card-body" style="max-height: 520px; overflow-y: auto;">
+            <% if (recentLogs.length === 0) { %>
+              <p class="text-muted small mb-0">No activity yet.</p>
+            <% } %>
+            <% recentLogs.forEach(log => { %>
+              <div class="log-item">
+                <div class="fw-semibold"><%= log.action %></div>
+                <div class="text-muted"><%= log.target %></div>
+                <div class="text-muted" style="font-size:0.75rem;">
+                  by <%= log.admin_username %> · <%= new Date(log.created_at).toLocaleString('en-GB') %>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Edit User Modal -->
+  <!-- ===== EDIT USER MODAL ===== -->
   <div class="modal fade" id="editModal" tabindex="-1">
     <div class="modal-dialog">
       <form method="POST" id="editForm" class="modal-content">
@@ -131,6 +266,31 @@
     </div>
   </div>
 
+  <!-- ===== PAUSE COMPANY MODAL ===== -->
+  <div class="modal fade" id="pauseModal" tabindex="-1">
+    <div class="modal-dialog">
+      <form method="POST" action="/company/pause" id="pauseForm" class="modal-content">
+        <div class="modal-header bg-danger text-white">
+          <h5 class="modal-title">Pause Company Access</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="company_code" id="pauseCompanyCode">
+          <p class="small text-muted">
+            Company: <strong id="pauseCompanyLabel"></strong>
+          </p>
+          <label class="form-label">Message to show user</label>
+          <textarea name="message" id="pauseMessage" class="form-control" rows="4"
+            placeholder="e.g. Your subscription has expired. Please contact us to renew."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">Pause Access</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     function openEditModal(id, companyCode, username, role) {
@@ -141,6 +301,28 @@
       document.getElementById('editForm').action = `/users/edit/${id}`;
       new bootstrap.Modal(document.getElementById('editModal')).show();
     }
+
+    function openPauseModal(companyCode, existingMessage) {
+      document.getElementById('pauseCompanyCode').value = companyCode;
+      document.getElementById('pauseCompanyLabel').textContent = companyCode;
+      document.getElementById('pauseMessage').value = existingMessage || '';
+      new bootstrap.Modal(document.getElementById('pauseModal')).show();
+    }
+
+    // Search filters
+    document.getElementById('userSearch').addEventListener('input', function() {
+      const q = this.value.toLowerCase();
+      document.querySelectorAll('#userTable tbody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+
+    document.getElementById('companySearch').addEventListener('input', function() {
+      const q = this.value.toLowerCase();
+      document.querySelectorAll('#companyTable tbody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
   </script>
 </body>
 </html>
