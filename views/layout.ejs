@@ -354,7 +354,13 @@
 
     <% if (currentUser && currentUser.role==='admin' ) { %>
       <a href="/users"><i class="bi bi-people"></i> Manage Users</a>
+      <a href="/admin/features"><i class="bi bi-toggles"></i> Feature Flags</a>
       <% } %>
+
+        <!-- Company Admin — company_admin ko dikhao -->
+        <% if (currentUser && (currentUser.company_role==='company_admin' || currentUser.role==='admin' )) { %>
+          <a href="/company-admin"><i class="bi bi-person-gear"></i> User Access</a>
+          <% } %>
   </div>
 
   <!-- 📋 Topbar -->

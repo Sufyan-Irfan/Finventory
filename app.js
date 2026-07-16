@@ -94,16 +94,23 @@ app.post('/login', async (req, res) => {
 
     // Login success ke baad, session set karne se pehle:
     const [[freshUser]] = await db.query(
-      'SELECT session_version FROM users WHERE id = ?',
+      'SELECT session_version, company_role, permissions FROM users WHERE id = ?',
       [user.id]
     );
 
-    // ✅ Store session with company info
+    // ✅ Store session with company info + RBAC
     req.session.user = {
-      id: user.id,
-      username: user.username,
-      role: user.role,
-      company_code: user.company_code
+      id:              user.id,
+      username:        user.username,
+      role:            user.role,
+      company_code:    user.company_code,
+      company_role:    freshUser?.company_role || 'user',
+      session_version: freshUser?.session_version || 1,
+      permissions:     freshUser?.permissions
+        ? (typeof freshUser.permissions === 'string'
+            ? JSON.parse(freshUser.permissions)
+            : freshUser.permissions)
+        : {}
     };
 
     await db.query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
@@ -181,8 +188,52 @@ async function logAdminAction(req, action, target) {
   }
 }
 
+// ===================== RBAC HELPERS =====================
+function hasPermission(req, perm) {
+  const user = req.session.user;
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (user.company_role === 'company_admin') return true;
+  const perms = user.permissions || {};
+  return !!perms[perm];
+}
+
+function requirePermission(perm) {
+  return (req, res, next) => {
+    if (hasPermission(req, perm)) return next();
+    req.flash('error', 'You do not have permission to access this.');
+    return res.redirect('/dashboard');
+  };
+}
+
+// ===================== FEATURES MIDDLEWARE =====================
+async function loadFeatures(req, res, next) {
+  try {
+    if (req.session.user) {
+      const companyCode = req.session.user.company_code;
+      const [rows] = await db.query(
+        'SELECT feature_key, enabled FROM company_features WHERE company_code = ?',
+        [companyCode]
+      );
+      const features = {};
+      rows.forEach(r => { features[r.feature_key] = !!r.enabled; });
+      req.features = features;
+      res.locals.features = features;
+    } else {
+      req.features = {};
+      res.locals.features = {};
+    }
+    next();
+  } catch (err) {
+    req.features = {};
+    res.locals.features = {};
+    next();
+  }
+}
+
 app.use(expressLayouts);
 app.set('layout', 'layout');
+app.use(loadFeatures);
 
 // ========== USER MANAGEMENT (Admin Only) ==========
 app.get('/users', isAuthenticated, isAdmin, async (req, res) => {
@@ -249,9 +300,12 @@ app.post('/users/add', isAuthenticated, isAdmin, async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // ✅ role='admin' in form = company_admin, NOT software admin
+    const actualCompanyRole = role === 'admin' ? 'company_admin' : 'user';
+
     await db.query(
-      'INSERT INTO users (company_code, username, password, role) VALUES (?, ?, ?, ?)',
-      [company_code, username, hashedPassword, role]
+      'INSERT INTO users (company_code, username, password, role, company_role) VALUES (?, ?, ?, ?, ?)',
+      [company_code, username, hashedPassword, 'user', actualCompanyRole]
     );
 
     if (!companyExists) {
@@ -289,7 +343,7 @@ app.post('/users/add', isAuthenticated, isAdmin, async (req, res) => {
 
   res.redirect('/users');
 });
-
+ 
 // Edit User
 app.post('/users/edit/:id', isAuthenticated, isAdmin, async (req, res) => {
   const { company_code, username, password, role } = req.body;
@@ -700,7 +754,7 @@ app.post("/setup/import-data", upload.single("dataFile"), async (req, res) => {
   }
 });
 
-app.get('/gl/groups', isAuthenticated, async (req, res) => {
+app.get('/gl/groups', isAuthenticated, requirePermission('accounts_manage'), async (req, res) => {
   const companyCode = req.session.user.company_code;
 
   const [groups] = await db.query(
@@ -781,7 +835,7 @@ app.post('/gl/delete-group/:id', isAuthenticated, async (req, res) => {
 });
 
 // Accounts     
-app.get('/gl/accounts', isAuthenticated, async (req, res) => {
+app.get('/gl/accounts', isAuthenticated, requirePermission('accounts_manage'), async (req, res) => {
   const companyCode = req.session.user.company_code;
 
   const [accounts] = await db.query(`
@@ -897,7 +951,7 @@ app.get('/gl/chart', isAuthenticated, async (req, res) => {
 
 //===========Add Transaction=============
 
-app.get('/gl/add-transaction', isAuthenticated, async (req, res) => {
+app.get('/gl/add-transaction', isAuthenticated, requirePermission('entry_add'), async (req, res) => {
   const { type, voucher_no } = req.query;
   const companyCode = req.session.user.company_code;
 
@@ -993,7 +1047,7 @@ app.get('/gl/add-transaction', isAuthenticated, async (req, res) => {
   });
 });
 
-app.post('/gl/add-transaction', isAuthenticated, async (req, res) => {
+app.post('/gl/add-transaction', isAuthenticated, requirePermission('entry_add'), async (req, res) => {
   const {
     entry_type, voucher_type, date, voucher_no,
     serial_no, account_code, description,
@@ -1274,7 +1328,7 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
 });
 
 // ==================== DAILY POSTING ====================
-app.get('/daily-posting', isAuthenticated, async (req, res) => {
+app.get('/daily-posting', isAuthenticated, requirePermission('daily_posting'), async (req, res) => {
   const companyCode = req.session.user.company_code;
   const today = new Date().toISOString().split('T')[0];
 
@@ -1373,7 +1427,7 @@ app.get('/daily-posting', isAuthenticated, async (req, res) => {
   }
 });
 
-app.get('/report', isAuthenticated, async (req, res) => {
+app.get('/report', isAuthenticated, requirePermission('reports_view'), async (req, res) => {
   const companyCode = req.session.user.company_code;
   try {
     const [accounts] = await db.query(
@@ -1394,7 +1448,7 @@ app.get('/report', isAuthenticated, async (req, res) => {
 });
 
 // ==================== REPORT RESULT ====================
-app.post('/report-result', isAuthenticated, async (req, res) => {
+app.post('/report-result', isAuthenticated, requirePermission('reports_view'), async (req, res) => {
   let { start_date, end_date, from_account, to_account } = req.body;
   const companyCode = req.session.user.company_code;
 
@@ -1408,8 +1462,8 @@ app.post('/report-result', isAuthenticated, async (req, res) => {
   const formattedStart = parseDMY(start_date);
   const formattedEnd = parseDMY(end_date);
 
-  // ✅ Shahid company ke liye against_account column show hoga
-  const showAgainst = companyCode === 'Shahid';
+  // ✅ Feature flag se against_account column show hoga
+  const showAgainst = req.features.against_column || false;
 
   try {
     const [accountsList] = await db.query(
@@ -1519,7 +1573,7 @@ app.post('/report-result', isAuthenticated, async (req, res) => {
 });
 
 // TRIAL BALANCE - filter page
-app.get('/trial-balance', isAuthenticated, async (req, res) => {
+app.get('/trial-balance', isAuthenticated, requirePermission('trial_balance'), async (req, res) => {
   const companyCode = req.session.user.company_code;
   try {
     const [accounts] = await db.query(
@@ -1639,7 +1693,7 @@ app.post('/trial-balance-result', isAuthenticated, async (req, res) => {
 });
 
 // CASH BOOK - FILTER PAGE
-app.get('/cash-book', isAuthenticated, async (req, res) => {
+app.get('/cash-book', isAuthenticated, requirePermission('cash_book'), async (req, res) => {
   try {
     res.render('cash-book', {
       company_code: req.session.user.company_code
@@ -1651,7 +1705,7 @@ app.get('/cash-book', isAuthenticated, async (req, res) => {
 });
 
 // CASH BOOK - RESULT
-app.post('/cash-book-result', isAuthenticated, async (req, res) => {
+app.post('/cash-book-result', isAuthenticated, requirePermission('cash_book'), async (req, res) => {
   const { start_date, end_date } = req.body;
   const company_code = req.session.user.company_code;
 
@@ -1680,11 +1734,10 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
   const eDate = parseDMY(end_date);
 
   try {
-    // ✅ Shahid company: cash group ke saare accounts
+    // ✅ Feature flag: multi_cash_book enabled ho to cash group ke saare accounts
     let cashCodes = [CASH];
 
-    if (company_code === 'Shahid') {
-      // Cash account ka group_id nikalo
+    if (req.features.multi_cash_book) {
       const [[cashAcc]] = await db.query(
         `SELECT group_id FROM accounts WHERE account_code = ? AND company_code = ?`,
         [CASH, company_code]
@@ -1751,7 +1804,7 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
       credit: rows.reduce((s, r) => s + Number(r.credit || 0), 0)
     };
 
-    const isShahid = company_code === 'Shahid';
+    const isMultiCash = req.features.multi_cash_book || false;
 
     res.render('cash-book-result', {
       rows: rowsWithBalance,
@@ -1762,7 +1815,7 @@ app.post('/cash-book-result', isAuthenticated, async (req, res) => {
       fmt,
       company_code,
       cash_account: CASH,
-      isShahid      // ✅ frontend ko pass karo
+      isShahid: isMultiCash   // frontend variable same rakha — EJS change na ho
     });
 
   } catch (err) {
@@ -1887,7 +1940,7 @@ function invToDisplayDate(d) {
 const invN = v => parseFloat(v) || 0;
 
 // ── GET /invoices — list ────────────────────────────────────────
-app.get('/invoices', isAuthenticated, async (req, res) => {
+app.get('/invoices', isAuthenticated, requirePermission('invoice_view'), async (req, res) => {
   const cc = req.session.user.company_code;
   try {
     const [invoices] = await db.query(`
@@ -1912,7 +1965,7 @@ app.get('/invoices', isAuthenticated, async (req, res) => {
 });
 
 // ── GET /invoices/add — new invoice form ────────────────────────
-app.get('/invoices/add', isAuthenticated, async (req, res) => {
+app.get('/invoices/add', isAuthenticated, requirePermission('invoice_view'), async (req, res) => {
   const cc = req.session.user.company_code;
   try {
     const [[last]] = await db.query(
@@ -1947,7 +2000,7 @@ app.get('/invoices/add', isAuthenticated, async (req, res) => {
 });
 
 // ── GET /invoices/edit/:id — edit existing invoice ──────────────
-app.get('/invoices/edit/:id', isAuthenticated, async (req, res) => {
+app.get('/invoices/edit/:id', isAuthenticated, requirePermission('invoice_view'), async (req, res) => {
   const cc = req.session.user.company_code;
   try {
     const [[inv]] = await db.query(
@@ -2022,7 +2075,7 @@ app.get('/invoices/edit/:id', isAuthenticated, async (req, res) => {
 });
 
 // ── POST /invoices/save — insert or update ──────────────────────
-app.post('/invoices/save', isAuthenticated, async (req, res) => {
+app.post('/invoices/save', isAuthenticated, requirePermission('invoice_view'), async (req, res) => {
   const cc = req.session.user.company_code;
   const b = req.body;
 
@@ -2100,7 +2153,7 @@ app.post('/invoices/save', isAuthenticated, async (req, res) => {
 });
 
 // ── POST /invoices/delete/:id ────────────────────────────────────
-app.post('/invoices/delete/:id', isAuthenticated, async (req, res) => {
+app.post('/invoices/delete/:id', isAuthenticated, requirePermission('invoice_view'), async (req, res) => {
   const cc = req.session.user.company_code;
   try {
     await db.query('DELETE FROM invoices WHERE id=? AND company_code=?', [req.params.id, cc]);
@@ -2140,6 +2193,182 @@ app.get('/invoices/api/party/:code', isAuthenticated, async (req, res) => {
   );
   const balance = invN(acc.opening_balance) + invN(txn.d) - invN(txn.c);
   res.json({ found: true, name: acc.name, balance: balance.toFixed(2) });
+});
+
+// ===================== COMPANY ADMIN — User Access Control =====================
+app.get('/company-admin', isAuthenticated, async (req, res) => {
+  const user = req.session.user;
+  if (user.role !== 'admin' && user.company_role !== 'company_admin') {
+    req.flash('error', 'Access denied.');
+    return res.redirect('/dashboard');
+  }
+
+  const companyCode = user.company_code;
+
+  const [users] = await db.query(
+    `SELECT id, username, company_role, permissions, last_login 
+     FROM users 
+     WHERE company_code = ? AND username != ?
+     ORDER BY username`,
+    [companyCode, user.username]
+  );
+
+  const usersWithPerms = users.map(u => ({
+    ...u,
+    permissions: u.permissions
+      ? (typeof u.permissions === 'string' ? JSON.parse(u.permissions) : u.permissions)
+      : {}
+  }));
+
+  res.render('company-admin', {
+    companyUsers: usersWithPerms,
+    allPermissions: [
+      { key: 'entry_add',       label: 'Add Voucher' },
+      { key: 'entry_edit',      label: 'Edit Voucher' },
+      { key: 'entry_delete',    label: 'Delete Voucher' },
+      { key: 'reports_view',    label: 'GL Transactions' },
+      { key: 'trial_balance',   label: 'Trial Balance' },
+      { key: 'cash_book',       label: 'Cash Book' },
+      { key: 'daily_posting',   label: 'Daily Posting' },
+      { key: 'invoice_view',    label: 'Invoices' },
+      { key: 'accounts_manage', label: 'Manage Accounts' },
+      { key: 'import_data',     label: 'Import Data' },
+    ],
+    error:   req.flash('error'),
+    success: req.flash('success')
+  });
+});
+
+// ✅ Company Admin — Add user to own company
+app.post('/company-admin/add-user', isAuthenticated, async (req, res) => {
+  const sessionUser = req.session.user;
+  if (sessionUser.role !== 'admin' && sessionUser.company_role !== 'company_admin') {
+    req.flash('error', 'Access denied.');
+    return res.redirect('/dashboard');
+  }
+
+  const { username, password, company_role } = req.body;
+  const companyCode = sessionUser.company_code; // sirf apni company mein
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const actualCompanyRole = company_role === 'company_admin' ? 'company_admin' : 'user';
+
+    await db.query(
+      'INSERT INTO users (company_code, username, password, role, company_role) VALUES (?, ?, ?, ?, ?)',
+      [companyCode, username, hashedPassword, 'user', actualCompanyRole]
+    );
+    req.flash('success', `User ${username} added successfully.`);
+  } catch (err) {
+    console.error('Company admin add user error:', err);
+    req.flash('error', 'Failed to add user. Username may already exist.');
+  }
+  res.redirect('/company-admin');
+});
+
+// ✅ Company Admin — Delete user from own company
+app.post('/company-admin/delete-user/:id', isAuthenticated, async (req, res) => {
+  const sessionUser = req.session.user;
+  if (sessionUser.role !== 'admin' && sessionUser.company_role !== 'company_admin') {
+    req.flash('error', 'Access denied.');
+    return res.redirect('/dashboard');
+  }
+
+  try {
+    // Sirf apni company ke user delete kar sakta hai
+    await db.query(
+      'DELETE FROM users WHERE id = ? AND company_code = ?',
+      [req.params.id, sessionUser.company_code]
+    );
+    req.flash('success', 'User deleted.');
+  } catch (err) {
+    console.error('Company admin delete error:', err);
+    req.flash('error', 'Failed to delete user.');
+  }
+  res.redirect('/company-admin');
+});
+
+app.post('/company-admin/update-permissions/:id', isAuthenticated, async (req, res) => {
+  const user = req.session.user;
+  if (user.role !== 'admin' && user.company_role !== 'company_admin') {
+    return res.redirect('/dashboard');
+  }
+
+  const permKeys = [
+    'entry_add','entry_edit','entry_delete',
+    'reports_view','trial_balance','cash_book','daily_posting',
+    'invoice_view','accounts_manage','import_data'
+  ];
+
+  const permissions = {};
+  permKeys.forEach(k => { permissions[k] = req.body[k] === 'on'; });
+
+  const company_role = req.body.company_role || 'user';
+
+  try {
+    await db.query(
+      'UPDATE users SET permissions = ?, company_role = ? WHERE id = ? AND company_code = ?',
+      [JSON.stringify(permissions), company_role, req.params.id, user.company_code]
+    );
+    req.flash('success', 'Permissions updated.');
+  } catch (err) {
+    console.error(err);
+    req.flash('error', 'Failed to update permissions.');
+  }
+  res.redirect('/company-admin');
+});
+
+// ===================== SUPER ADMIN — Feature Flags =====================
+const AVAILABLE_FEATURES = [
+  { key: 'against_column',   label: 'Against Account Column (Ledger/Report)' },
+  { key: 'multi_cash_book',  label: 'Multi Cash Account Book' },
+  { key: 'sell_purchase',    label: 'Sell & Purchase Invoice Module' },
+  { key: 'daily_posting',    label: 'Daily Posting Module' },
+];
+
+app.get('/admin/features', isAuthenticated, isAdmin, async (req, res) => {
+  const [companies] = await db.query(
+    'SELECT DISTINCT company_code FROM company_settings ORDER BY company_code'
+  );
+
+  const [allFeatures] = await db.query(
+    'SELECT * FROM company_features ORDER BY company_code, feature_key'
+  );
+
+  const featureMap = {};
+  allFeatures.forEach(f => {
+    if (!featureMap[f.company_code]) featureMap[f.company_code] = {};
+    featureMap[f.company_code][f.feature_key] = f.enabled;
+  });
+
+  res.render('admin-features', {
+    companies,
+    featureMap,
+    availableFeatures: AVAILABLE_FEATURES,
+    error:   req.flash('error'),
+    success: req.flash('success')
+  });
+});
+
+app.post('/admin/features/update', isAuthenticated, isAdmin, async (req, res) => {
+  const { company_code } = req.body;
+
+  try {
+    for (const feat of AVAILABLE_FEATURES) {
+      const enabled = req.body[feat.key] === 'on' ? 1 : 0;
+      await db.query(`
+        INSERT INTO company_features (company_code, feature_key, enabled)
+        VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)
+      `, [company_code, feat.key, enabled]);
+    }
+    await logAdminAction(req, 'Updated features', company_code);
+    req.flash('success', `Features updated for ${company_code}`);
+  } catch (err) {
+    console.error(err);
+    req.flash('error', 'Failed to update features.');
+  }
+  res.redirect('/admin/features');
 });
 
 // app.listen(3000, () => console.log('Server running on http://localhost:3000'));
