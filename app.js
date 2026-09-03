@@ -25,9 +25,7 @@ const ws = wb.addWorksheet('Trial Balance');
 const upload = multer({ dest: "uploads/" });
 
 function fmt(n) {
-  return Number(n || 0)
-    .toFixed(2)
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return Math.round(Number(n || 0)).toLocaleString('en-PK');
 }
 
 app.use(express.urlencoded({ extended: true }));
@@ -1362,6 +1360,7 @@ app.get('/daily-posting', isAuthenticated, requirePermission('daily_posting'), a
         t.voucher_no,
         DATE_FORMAT(t.date, '%d-%m-%Y') AS formatted_date,
         t.description,
+        t.reference,
         t.debit,
         t.credit,
         t.account_code,
@@ -1412,8 +1411,9 @@ app.get('/daily-posting', isAuthenticated, requirePermission('daily_posting'), a
         description: accountLine.description || '',
         account_code: accountLine.account_code,
         account_name: accountLine.account_name,
-        cash_code: cashLine ? cashLine.account_code : '-',
-        cash_name: cashLine ? (cashLine.account_name || cashLine.account_code) : '-',
+        // cash_code: cashLine ? cashLine.account_code : '-',
+        // cash_name: cashLine ? (cashLine.account_name || cashLine.account_code) : '-',
+        reference: accountLine.reference || '',
         debit,
         credit,
       });
