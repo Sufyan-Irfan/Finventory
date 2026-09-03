@@ -26,8 +26,11 @@
 
           <div class="col-6 col-md-4">
             <label class="form-label">Voucher No</label>
-            <input type="text" id="voucher_no" name="voucher_no" class="form-control bg-light" readonly
-              value="<%= editData ? editData.voucher_no : '' %>">
+            <!-- <input type="text" id="voucher_no" name="voucher_no" class="form-control bg-light" readonly
+              value="<%= editData ? editData.voucher_no : '' %>"> -->
+              <input type="text" id="voucher_no" name="voucher_no" class="form-control"
+  value="<%= editData ? editData.voucher_no : '' %>"
+  placeholder="Auto ya manual likho">
           </div>
 
           <div class="col-6 col-md-4">
