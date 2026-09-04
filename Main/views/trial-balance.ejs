@@ -7,151 +7,49 @@
   <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet">
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-  <style>
-    .acc-list-box {
-      max-height: 280px;
-      overflow-y: auto;
-      border: 1px solid #dee2e6;
-      border-radius: 6px;
-      padding: 8px;
-      background: #fff;
-    }
-    .acc-item {
-      display: flex;
-      align-items: center;
-      padding: 4px 6px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    .acc-item:hover { background: #f0f4ff; }
-    .acc-item input[type=checkbox] { margin-right: 8px; flex-shrink: 0; }
-    .acc-item label { margin: 0; cursor: pointer; }
-    .selected-count {
-      font-size: 12px;
-      color: #6c757d;
-    }
-  </style>
 </head>
 <body>
   <div class="container mt-4 px-3">
     <h3>🔎 Trial Balance</h3>
-
-    <form method="POST" action="/trial-balance-result" id="tbForm" class="row g-3 align-items-end">
-
+    <form method="POST" action="/trial-balance-result" class="row g-3 align-items-end">
       <div class="col-12 col-sm-6 col-md-4">
         <label class="form-label">From (Start Date)</label>
         <input type="text" id="start_date" name="start_date" class="form-control" required>
       </div>
-
       <div class="col-12 col-sm-6 col-md-4">
         <label class="form-label">To (End Date)</label>
         <input type="text" id="end_date" name="end_date" class="form-control" required>
       </div>
-
       <div class="col-12 col-sm-6 col-md-4">
-        <label class="form-label">Zero Values</label>
-        <select name="zero_values" class="form-select">
-          <option value="no" selected>Hide zero rows</option>
-          <option value="yes">Show all</option>
+        <label class="form-label">Sort By</label>
+        <select name="sort_by" class="form-select">
+          <option value="name">Party Name (A → Z)</option>
+          <option value="code">Code (ascending)</option>
         </select>
       </div>
-
-      <%# ── Account Filter Toggle ── %>
-      <div class="col-12">
-        <div class="form-check form-switch mb-2">
-          <input class="form-check-input" type="checkbox" id="filterToggle" onchange="toggleFilter()">
-          <label class="form-check-label fw-semibold" for="filterToggle">
-            Filter specific accounts
-            <small class="text-muted fw-normal">(by default: all accounts)</small>
-          </label>
-        </div>
-
-        <div id="accFilterBox" style="display:none;">
-          <div class="row g-2 mb-2">
-            <div class="col-12 col-md-6">
-              <input type="text" id="accSearch" class="form-control form-control-sm"
-                     placeholder="🔍 Search by code or name..." oninput="filterAccList()">
-            </div>
-            <div class="col-auto">
-              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectAll(true)">
-                ✓ Select All
-              </button>
-              <button type="button" class="btn btn-outline-secondary btn-sm ms-1" onclick="selectAll(false)">
-                ✗ Clear
-              </button>
-            </div>
-            <div class="col-auto">
-              <span class="selected-count" id="selCount">0 selected</span>
-            </div>
-          </div>
-
-          <div class="acc-list-box" id="accList">
-            <% accounts.forEach(a => { %>
-              <div class="acc-item acc-row"
-                   data-code="<%= a.code.toLowerCase() %>"
-                   data-name="<%= a.name.toLowerCase() %>">
-                <input type="checkbox" name="selected_accounts[]"
-                       value="<%= a.code %>"
-                       id="acc_<%= a.code %>"
-                       onchange="updateCount()">
-                <label for="acc_<%= a.code %>">
-                  <strong><%= a.code %></strong> — <%= a.name %>
-                </label>
-              </div>
-            <% }) %>
-          </div>
-
-          <div class="mt-1 small text-muted">
-            Agar koi bhi select nahi to tamam accounts show honge.
-          </div>
-        </div>
+      <div class="col-12 col-sm-6 col-md-4">
+        <label class="form-label">Zero values</label>
+        <select name="zero_values" class="form-select">
+          <option value="no" selected>No (hide zero rows)</option>
+          <option value="yes">Yes (show all)</option>
+        </select>
       </div>
-
       <div class="col-12">
         <button class="btn btn-primary">Display Trial Balance</button>
       </div>
-
     </form>
   </div>
-
-  <script>
-    // Date pickers
-    flatpickr("#start_date", { dateFormat: "d-m-Y", allowInput: true,
-      defaultDate: new Date(new Date().getFullYear(), 0, 1) });
-    flatpickr("#end_date",   { dateFormat: "d-m-Y", allowInput: true,
-      defaultDate: new Date() });
-
-    // Toggle filter section
-    function toggleFilter() {
-      const on = document.getElementById('filterToggle').checked;
-      document.getElementById('accFilterBox').style.display = on ? 'block' : 'none';
-      if (!on) selectAll(false); // clear selections when hidden
-    }
-
-    // Search within list
-    function filterAccList() {
-      const q = document.getElementById('accSearch').value.toLowerCase().trim();
-      document.querySelectorAll('.acc-row').forEach(row => {
-        const match = !q || row.dataset.code.includes(q) || row.dataset.name.includes(q);
-        row.style.display = match ? 'flex' : 'none';
-      });
-    }
-
-    // Select all / clear — only visible rows when search active
-    function selectAll(state) {
-      document.querySelectorAll('.acc-row').forEach(row => {
-        if (row.style.display !== 'none') {
-          row.querySelector('input[type=checkbox]').checked = state;
-        }
-      });
-      updateCount();
-    }
-
-    function updateCount() {
-      const n = document.querySelectorAll('.acc-row input:checked').length;
-      document.getElementById('selCount').textContent = `${n} selected`;
-    }
-  </script>
+<script>
+  function formatDMY(d){
+    const dd = String(d.getDate()).padStart(2,'0');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const yy = d.getFullYear();
+    return `${dd}-${mm}-${yy}`;
+  }
+  const startInput = flatpickr("#start_date", { dateFormat: "d-m-Y", allowInput: true });
+  const endInput = flatpickr("#end_date", { dateFormat: "d-m-Y", allowInput: true });
+  startInput.setDate(new Date(2000, 0, 1));
+  endInput.setDate(new Date(9999, 11, 31));
+</script>
 </body>
 </html>
