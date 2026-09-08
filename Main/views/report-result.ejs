@@ -73,6 +73,14 @@
             <table class="table table-bordered table-sm">
               <thead class="table-light">
                 <tr>
+                  <td colspan="<%= colspan + 3 %>" class="text-center text-muted small py-1"
+                    style="font-size:13px;border-top:1px dashed #ccc;">
+                    Printed: <strong>
+                      <%= new Date().toLocaleDateString('en-PK') %>
+                    </strong>
+                  </td>
+                </tr>
+                <tr>
                   <th>Date</th>
                   <th>Voucher</th>
                   <th>Description</th>
@@ -228,6 +236,17 @@
         const rows = [];
         let bal = Number(acc.opening_balance || 0);
         let td = 0, tc = 0;
+        rows.push([{
+          content: `Printed: ${new Date().toLocaleDateString('en-PK')}`,
+          colSpan: sa ? 8 : 7,
+          styles: {
+            halign: 'center',
+            fontStyle: 'italic',
+            textColor: [120, 120, 120],
+            fontSize: 9,
+            fillColor: [248, 249, 250]
+          }
+        }]);
 
         const blankRow = sa
           ? ['', '', 'Opening Balance', '', '', '', '', fmtExport(bal)]
