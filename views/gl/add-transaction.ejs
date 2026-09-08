@@ -319,12 +319,18 @@ $(document).ready(function () {
       });
       const r = await res.json();
       $("#alertBox").html(`<div class="alert alert-${r.success ? 'success' : 'danger'}">${r.message}</div>`);
-      if (data.is_edit === "1") {
-      window.location.href = `/ search ? query = ${ data.voucher_no }& message=Updated`;
+      if (r.success) {
+  // Print window kholo
+  // window.open(`/voucher/print/${data.voucher_no}`, '_blank');
+  
+  setTimeout(() => {
+    if (data.is_edit === "1") {
+      window.location.href = `/search?query=${data.voucher_no}&message=Updated`;
     } else {
-      // Same page reload — new voucher fetch hoga, fields clear hongi
-      window.location.href = `/ gl / add - transaction ? type = ${ voucherType === 'PV' ? 'payment' : 'receipt' }`;
+      window.location.href = `/gl/add-transaction?type=${voucherType === 'PV' ? 'payment' : 'receipt'}`;
     }
+  }, 800);
+}
     } catch {
       $("#alertBox").html('<div class="alert alert-danger">Network error. Try again.</div>');
     }
@@ -332,4 +338,3 @@ $(document).ready(function () {
 
 });
 </script>
-
