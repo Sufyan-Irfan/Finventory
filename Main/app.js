@@ -1753,13 +1753,24 @@ app.post('/cash-book-result', isAuthenticated, requirePermission('cash_book'), a
     }
 
     // Opening balance — saare cash codes ka combined
-    const [[{ opening }]] = await db.query(`
-      SELECT IFNULL(SUM(debit - credit), 0) AS opening
-      FROM transactions
-      WHERE account_code IN (?)
-        AND DATE(date) < ?
-        AND company_code = ?
-    `, [cashCodes, sDate, company_code]);
+    // Accounts table se opening_balance
+const [[{ acc_opening }]] = await db.query(`
+  SELECT IFNULL(SUM(opening_balance), 0) AS acc_opening
+  FROM accounts
+  WHERE account_code IN (?)
+    AND company_code = ?
+`, [cashCodes, company_code]);
+
+// Transactions se start date se pehle ka balance
+const [[{ txn_opening }]] = await db.query(`
+  SELECT IFNULL(SUM(debit - credit), 0) AS txn_opening
+  FROM transactions
+  WHERE account_code IN (?)
+    AND DATE(date) < ?
+    AND company_code = ?
+`, [cashCodes, sDate, company_code]);
+
+const opening = Number(acc_opening || 0) + Number(txn_opening || 0);
 
     // Transactions — account name bhi lao (Shahid ke liye useful)
     const [rows] = await db.query(`
