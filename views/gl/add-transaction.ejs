@@ -319,9 +319,12 @@ $(document).ready(function () {
       });
       const r = await res.json();
       $("#alertBox").html(`<div class="alert alert-${r.success ? 'success' : 'danger'}">${r.message}</div>`);
-      if (r.success) {
-        setTimeout(() => { window.location.href = `/search?query=${data.voucher_no}&message=Updated`; }, 1500);
-      }
+      if (data.is_edit === "1") {
+      window.location.href = `/ search ? query = ${ data.voucher_no }& message=Updated`;
+    } else {
+      // Same page reload — new voucher fetch hoga, fields clear hongi
+      window.location.href = `/ gl / add - transaction ? type = ${ voucherType === 'PV' ? 'payment' : 'receipt' }`;
+    }
     } catch {
       $("#alertBox").html('<div class="alert alert-danger">Network error. Try again.</div>');
     }
